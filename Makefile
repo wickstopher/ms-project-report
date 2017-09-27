@@ -7,6 +7,7 @@ pdf:
 	$(PDFLATEX) $(FILE)
 	$(BIBTEX) $(FILE)
 	$(PDFLATEX) $(FILE)
+	$(PDFLATEX) $(FILE)
 
 clean:
 	rm -f *.blg *.bbl *.pdf *.log *.aux 
