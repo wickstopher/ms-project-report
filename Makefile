@@ -10,4 +10,4 @@ pdf:
 	$(PDFLATEX) $(FILE)
 
 clean:
-	rm -f *.blg *.bbl *.pdf *.log *.aux 
+	rm -f *.blg *.bbl *.pdf *.log *.aux *.dvi
