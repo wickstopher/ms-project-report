@@ -4,9 +4,9 @@ BIBTEX=bibtex
 FILE=wicks_report
 
 pdf:
-	$(PDFLATEX) $(FILE)
+	$(LATEX) $(FILE)
 	$(BIBTEX) $(FILE)
-	$(PDFLATEX) $(FILE)
+	$(LATEX) $(FILE)
 	$(PDFLATEX) $(FILE)
 
 clean:
