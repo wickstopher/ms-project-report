@@ -83,13 +83,21 @@ STOMP, the Simple (or Streaming) Text Oriented Message Protocol, is a text-based
 \cite{stomp:spec}. It is designed so that applications in a distributed software system can communicate easily (from the 
 perspective of an application developer) over a network.
 
-``Every programming model needs three things: a semanticsm, an implementation, and useful idioms" 
+``Every programming model needs three things: a semantics, an implementation, and useful idioms" 
 \cite{te:idioms}. The semantics and the implementation have been provided in the work laid out in \cite{te:original}.
 In this work, we explore the use of transactional events in the implementation and API design of a
 collection of software tools and applications utilizing the STOMP protocol. We implement a client 
-API, various client applications, a message broker (server), and shared libraries utilizing 
+API, an command-line client application, a message broker (server), and shared libraries utilizing 
 Transactional Events Haskell (TE Haskell). In particular, we identify useful idioms, patterns,
 and novel use cases for transactional events as a programming model.
+
+\section{Related Work}
+To date there has been relatively little work around transactional events aside from the foundational work done by
+Fluet and Donnelly in 2008 \cite{te:original}. Fluet and Amsden extend this foundation with a refined semantics  for ``fairness" in 2011 \cite{te:fairness}.
+A detailed account of a large-scale implementation utilizing the abstraction does not appear to exist in the literature. 
+In addition to Haskell, the semantics outlined in Fluet and Donnelly's 2008 work have been implemented in ML \cite{te:ml}. 
+Kehrt, Effinger-Dean, Schmitz, and Grossman identify some basic problems that arise from some simple use cases for
+transactional events, and propose idiomatic approaches to these issues in their work ``Programming Idioms for Transactional Events" \cite{te:idioms}.  
 
 \bibliographystyle{IEEEtran}
 \bibliography{IEEEabrv,citations}
