@@ -2,6 +2,8 @@
 \documentclass[conference, letterpaper]{IEEEtran}
 
 \usepackage{listings}
+\usepackage{minted}
+\usemintedstyle{bw}
 
 \hyphenation{op-tical net-works semi-conduc-tor}
 
@@ -44,7 +46,7 @@
 
 \begin{document}
 
-\title{Using Transactional Events in Haskell in the Impelemntation of Message Broker Middleware}
+\title{Using Transactional Events in Haskell in the Impelementation of Message Broker Middleware}
 
 \author{\IEEEauthorblockN{Christopher R. Wicks}
 \IEEEauthorblockA{Department of Computer Science\\Golisano College of Computing and Information Sciences\\
@@ -75,7 +77,7 @@ inspiration from CML, Concurrent Haskell, and Software Transactional Memory (STM
 exist implementations as language extensions for both Haskell \cite{te:original} and ML \cite{te:ml}.
 
 Transactional events are primarily motivated by the need for better abstractions in the development of 
-concurrent programs. The non-deterministic execution order of concurrent programs make them inherently
+concurrent programs. The non-deterministic execution order of concurrent programs makes them inherently
 difficult to reason about. Transactional events help to ease some of the pain by allowing for inter-thread
 communications to be composed of modular events in the form of transactions.
 
@@ -89,7 +91,37 @@ In this work, we explore the use of transactional events in the implementation a
 collection of software tools and applications utilizing the STOMP protocol. We implement a client 
 API, an command-line client application, a message broker (server), and shared libraries utilizing 
 Transactional Events Haskell (TE Haskell). In particular, we identify useful idioms, patterns,
-and novel use cases for transactional events as a programming model.
+and interesting use cases for transactional events as a programming model.
+
+\section{The STOMP Protocol}
+
+An in depth description and discussion of the STOMP protocol. (1-2 pages?)
+
+\section{Transactional Events}
+
+An in depth description and discussion on transactional events. (1-2 pages?)
+
+\section{Library Design \& Usage}
+
+A detailed account of the shared libraries (2-3 pages?)
+
+\begin{minted}{haskell}
+-- Cool, it's Haskell code!
+fib n :: Integer -> Integer
+fib n = foldr (*) 1 [2..n]
+\end{minted}
+
+\section{Server Application Design \& Usage}
+
+A detailed account of the server application (4-5 pages?)
+
+\section{Client Application Design \& Usage}
+
+A detailed account of the client application (2-3 pages?)
+
+\section{Conclusions}
+
+Conclusions and final thoughts (1-2 pages?)
 
 \section{Related Work}
 To date there has been relatively little work around transactional events aside from the foundational work done by

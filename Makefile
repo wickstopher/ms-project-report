@@ -1,13 +1,15 @@
 LATEX=latex
 PDFLATEX=pdflatex
+FLAGS=-shell-escape
 BIBTEX=bibtex
 FILE=wicks_report
 
 pdf:
-	$(LATEX) $(FILE)
+	$(LATEX) $(FLAGS) $(FILE)
 	$(BIBTEX) $(FILE)
-	$(LATEX) $(FILE)
-	$(PDFLATEX) $(FILE)
+	$(LATEX) $(FLAGS) $(FILE)
+	$(PDFLATEX) $(FLAGS) $(FILE)
 
 clean:
 	rm -f *.blg *.bbl *.pdf *.log *.aux *.dvi
+	rm -rf _minted*
