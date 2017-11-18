@@ -21,6 +21,11 @@
 
 \renewcommand{\thispagestyle}[2]{} 
 
+\newcommand{\padlisting} {
+    \begin{minted}{text}
+    \end{minted}
+}
+
 \fancypagestyle{plain}{
         \fancyhead{}
         \fancyhead[C]{first page center header}
@@ -95,21 +100,118 @@ and interesting use cases for transactional events as a programming model.
 
 \section{The STOMP Protocol}
 
-An in depth description and discussion of the STOMP protocol. (1-2 pages?)
+STOMP is used primarily in the domain of message-oriented middleware. In these scenarios, many clients
+communicate with one or more servers, or message brokers, via some protocol. The message brokers then contain the necessary routing and transformation logic to pass that information on to other interested clients who may or may not be using the same protocol.
+
+STOMP is designed to be a very simple and easy to use protocol. The STOMP 1.2 specification supports 11 different client frames and 4 different server frames. One particularly interesting aspect of the protocol for the purposes of this work is the support of client-initiated transactions.
+
+The STOMP protocol is \textit{text-based}, with the command and header portion of the frames encoded using UTF-8. The frame body, if present, may be encoded arbitrarily, and may even contain binary data. A frame consists of a command, 0 or more headers followed bye a blank line, and a body which may be empty. A frame must always be terminated by a null octet (\^{}@):
+
+\begin{minted}{text}
+    COMMAND
+    header1:value1
+    header2:value2
+
+    Message body^@
+\end{minted}
+
+\subsection{Client Frame Commands}
+
+The CONNECT and STOMP frames are equivalent in version 1.2 of the protocol; STOMP is preferred, but CONNECT is preserved for backwards compatibility. These frames allow the client to initiate a connection to a STOMP broker. The DISCONNECT frame allows a client to gracefully disconnect from a session with a STOMP broker. The SUBSCRIBE and UNSUBSCRIBE client frames allow a client to register and deregister their willingness to receive messages from a given destination. The ACK and NACK frames allow a client to either acknowledge of disacknowledge the processing of a received message. The BEGIN, COMMIT, and ABORT frames, respectively, allow the client to begin, commit, or abort a named transaction.
+
+\subsection{Server Frame Commands}
+
+The server only has 4 frames that it may send to a client. The CONNECTED frame acknowledges a successful connection request from the client and contains the results of both protocol negotiations (the highest protocol version supported by both client and server) and heartbeat negotiations. The MESSAGE frame contains message data from a registered destination. The RECEIPT frame contains a receipt for a frame sent by the client in which a receipt was requested via a special header. The ERROR frame indicates a protocol or processing error. After sending an ERROR frame, the protocol dictates the the server close the connection immediately.
+
+\subsection{Transactions}
+STOMP supports client-initated named transactions, in which it is requested that all messages sent as part of a given transaction are processed atomically by the server. STOMP brokers support the ability for a single client to have multiple ongoing transactions at any given time (the frames need not be sent atomically, or even successively), with the server keeping track of the state. Only SEND, ACK, and NACK frames may be part of a transaction, with the BEGIN, COMMIT, and ABORT frames managing the control. Whether or not a message is part of a transaction, or the specification of which transaction a control frame is referring to, is handled using the transaction frame header. An example of a SEND frame that is to be processed as part of the named transaction \textit{tx1} is given:
+
+\begin{minted}{text}
+    SEND
+    destination:q1
+    content-type:text/plain
+    content-length:13
+    transaction:tx1
+
+    Hello, world!^@
+\end{minted}
+
+\subsection{Heart-beating}
+STOMP supports bidirectional heart-beats between the client and server. If heart-beats are expected, the sender must send either a frame or a heart-beat at least once every \textit{n} milliseconds. If a longer interval transpires without having received any data, the receiver may consider the connection lost and close it. The client will send, in the STOMP or CONNECT frame, the minimum rate of heart-beats that it is able to both send and receive, if any. The server then compares those values to its own capabilities, and chooses the longest interval (or, if either client or server does not wish to send or receive heartbeats, 0 is chosen). An example of the STOMP frame is given:
+
+\begin{minted}{text}
+    STOMP
+    accept-version:1.0,1.1,1.2
+    host:wicks.com
+    heart-beat:4000,0
+    
+    ^@
+\end{minted}
+
+The first value in the heart-beat header indicates that the client is able to send heart-beats as quickly as once every 4000 milliseconds.  The second value in the heart-beat header indicates that the client does not wish to receive heart-beats from the server. If, for example, the server to which it is connecting only wishes to receive heart-beats every 10000 milliseconds, the corresponding CONNECTED acknowledgement would look as follows:
+
+\begin{minted}{text}
+    CONNECTED
+    accept-version:1.2
+    heart-beat:0,10000
+\end{minted}
+
+Note that the value of zero indicates that the server will not be sending heart-beats, even if it did support such, as the client has requested not to receive them. The value of 10000 indicates that based on the client's capabilities and its own expectations that it expects to receive either a heartbeat every 10000 milliseconds (the maximum value between the client's send rate and its own receive rate). Also note that heart-beating capabilities are dictated by the client. A server is free to reject a client if its heart-beating capabilities are not up to its minimum requirements, but this is an implementation detail and is not dictated by the protocol.
 
 \section{Transactional Events}
 
-An in depth description and discussion on transactional events. (1-2 pages?)
+The basic transactional events interface given by Fluet and Donnelly \cite{te:original} is provided here for ease of reference:
 
-\section{Library Design \& Usage}
-
-A detailed account of the shared libraries (2-3 pages?)
-
-\begin{minted}{haskell}
--- Cool, it's Haskell code!
-fib n :: Integer -> Integer
-fib n = foldr (*) 1 [2..n]
+\begin{minted}{text}
 \end{minted}
+\begin{minted} {haskell}
+    -- The Evt monad
+    data Evt a
+
+    sync :: Evt a -> IO a
+    thenEvt :: Evt a -> (a -> Evt b) -> Evt b
+    alwaysEvt :: a -> Evt a
+    chooseEvt :: Evt a -> Evt a -> Evt a
+    neverEvt :: Evt a
+
+    instance Monad Evt where
+       (>>=) = thenEvt
+       return = alwaysEvt
+
+    instance MonadPlus Evt where
+        mplus = chooseEvt
+        mzero = neverEvt
+
+    data SChan a -- Synchronous channels
+    newSChan :: Evt (SChan a)
+    sendEvt :: SChan a -> a -> Evt ()
+    recvEvt :: SChan a -> Evt a
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+This interface is used by composing events using the provided event combinators: \textit{thenEvt, alwaysEvt, chooseEvt}, and \textit{neverEvt}. We then use the \textit{sync} function to synchronize on an event. Said synchronization blocks until the event is able to complete, and the result is returned wrapped in the \textit{IO} monadic context. The synchronous channels allow us to create event channels that can be used to pass messages between concurrently executing threads. There are additional combinators, \textit{sendEvt} and \textit{recvEvt}, that allow the composition of events that pass messages between multiple threads. Any send on a synchronous channel must be matched with a corresponding receive in another thread on the same channel in order to be able to synchronize. A simple "Hello, world!" program using transactional events can be constructed as follows:
+
+\setminted{fontsize=\footnotesize,baselinestretch=1}
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+  import Control.Concurrent
+  import Control.Concurrent.TxEvent
+
+  main :: IO ()
+  main = do
+    channel <- sync newSChan
+    forkIO $ sync (sendEvt channel "Hello, world!")
+    s <- sync $ recvEvt channel
+    putStrLn s
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+This program first synchronizes on the creation of a new synchronous communications channel, forks off a thread that sends a String on the channel, and then blocks until it receives a String on the same channel and displays it on the standard output. Note that if we were to attempt to write this program without forking off the send to take place in a new thread, the initial synchronization on \textit{sendEvt} would block indefinitely.
+
+One of the primary attributes of transactional events that makes them an attractive tool for concurrent programming, and the one that sets the idiom apart from the similar message-passing style found in CML, is the fact that they are easily composable due to their monadic structure. As seen here, in the Haskell implementation the \textit{Evt} typeclass is a subclass of both \textit{Monad} and \textit{MonadPlus}. This allows for easy sequencing of events utilizing Haskell's \textit{do} notation, as the monadic bind is implemented as the \textit{thenEvt} combinator. Using this combinator, one can compose an event comprised of smaller events that must be able to complete in sequence. If any individual event in the composite is unable to complete, the entire event ``fizzles" without any side-effects that are observable by the rest of the system, providing transactional guarantee for event synchronization.
 
 \section{Server Application Design \& Usage}
 
