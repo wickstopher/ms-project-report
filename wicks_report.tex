@@ -137,7 +137,7 @@ STOMP supports client-initated named transactions, in which it is requested that
 \end{minted}
 
 \subsection{Heart-beating}
-STOMP supports bidirectional heart-beats between the client and server. If heart-beats are expected, the sender must send either a frame or a heart-beat at least once every \textit{n} milliseconds. If a longer interval transpires without having received any data, the receiver may consider the connection lost and close it. The client will send, in the STOMP or CONNECT frame, the minimum rate of heart-beats that it is able to both send and receive, if any. The server then compares those values to its own capabilities, and chooses the longest interval (or, if either client or server does not wish to send or receive heartbeats, 0 is chosen). An example of the STOMP frame is given:
+STOMP supports bidirectional heart-beats between the client and server. If heart-beats are expected, the sender must send either a frame or a heart-beat at least once every \textit{n} milliseconds. A heart-beat is comprised simply of an end-of-line (EOL) character. If a longer interval transpires without having received any data, the receiver may consider the connection lost and close it. The client will send, in the STOMP or CONNECT frame, the minimum rate of heart-beats that it is able to both send and receive, if any. The server then compares those values to its own capabilities, and chooses the longest interval (or, if either client or server does not wish to send or receive heartbeats, 0 is chosen). An example of the STOMP frame is given:
 
 \begin{minted}{text}
     STOMP
@@ -209,21 +209,75 @@ This interface is used by composing events using the provided event combinators:
 \begin{minted}{text}
 \end{minted}
 
-This program first synchronizes on the creation of a new synchronous communications channel, forks off a thread that sends a String on the channel, and then blocks until it receives a String on the same channel and displays it on the standard output. Note that if we were to attempt to write this program without forking off the send to take place in a new thread, the initial synchronization on \textit{sendEvt} would block indefinitely.
+This program first synchronizes on the creation of a new synchronous communications channel, forks off a thread that sends a String on the channel, and then blocks until it receives a String on the same channel, finally displaying it on the standard output. Note that if we were to attempt to write this program without forking off the send to take place in a new thread, the initial synchronization on \textit{sendEvt} would block indefinitely.
 
 One of the primary attributes of transactional events that makes them an attractive tool for concurrent programming, and the one that sets the idiom apart from the similar message-passing style found in CML, is the fact that they are easily composable due to their monadic structure. As seen here, in the Haskell implementation the \textit{Evt} typeclass is a subclass of both \textit{Monad} and \textit{MonadPlus}. This allows for easy sequencing of events utilizing Haskell's \textit{do} notation, as the monadic bind is implemented as the \textit{thenEvt} combinator. Using this combinator, one can compose an event comprised of smaller events that must be able to complete in sequence. If any individual event in the composite is unable to complete, the entire event ``fizzles" without any side-effects that are observable by the rest of the system, providing transactional guarantee for event synchronization.
 
-\section{Server Application Design \& Usage}
+The interface also provides a non-deterministic choice combinator in the form of \textit{chooseEvt}. This allows an event to synchronize on whichever of the two events it is able to synchronize on first, effectively aborting the computations performed in the event that is not chosen. Note that \textit{neverEvt} is the event that can never be synchronized upon. Hence, sequencing a \textit{neverEvt} using the monadic bind is an effective abort. Likewise, the \textit{chooseEvt}, as it cannot choose an event that will not successfully complete, will never synchronize on the \textit{neverEvt}.
 
-A detailed account of the server application (4-5 pages?)
+Using this interface, one can easily compose sophisticated computational event structures that allow for inter-thread communication but guarantee that irrevocable side effects can not take place during event synchronization (hence the "all-or-nothing" transactional claim). Indeed, transactional events are shown to be strictly more expressive than either STM Haskell and CML in \cite{te:original}. The authors provide encodings for both idioms using transactional events. The then demonstrate that one can express computations that are not possible in either, such as \textit{n}-way synchronization between threads.
 
-\section{Client Application Design \& Usage}
+\section{Project Goals}
 
-A detailed account of the client application (2-3 pages?)
+The primary goal of this project was to implement a message broker, client software, and APIs for the STOMP protocol using Haskell with transactional events. [needs more, but what?]
+
+\section{Library Design \& Usage}
+
+The initial challenge in implementing the shared libraries was in determing exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The Frame datastructure was broken down as follows, and was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+-- |A HeaderName is a type synonym for String, and 
+-- is one component of a Header
+type HeaderName     =   String
+
+-- |A HeaderValue is a type synonym for String, and 
+-- is one component of a Header
+type HeaderValue    =   String
+
+-- |A Header contains a name and a value for a 
+-- STOMP header
+data Header         =   Header HeaderName HeaderValue
+
+-- |A Headers is a recursive, list-like data structure 
+-- representing the set of Headers for a STOMP frame
+data Headers        =   Some Header Headers | EndOfHeaders
+
+-- |A Body represents the body of a STOMP frame. It
+-- is either empty or consists of a single ByteString.
+data Body           =   EmptyBody | Body ByteString
+
+-- |A Command represents the command portion of 
+-- a STOMP Frame.
+data Command        =   SEND |
+                        SUBSCRIBE |
+                        UNSUBSCRIBE |
+                        BEGIN |
+                        COMMIT |
+                        ABORT |
+                        ACK |
+                        NACK |
+                        DISCONNECT |
+                        CONNECT |
+                        STOMP |
+                        CONNECTED |
+                        MESSAGE |
+                        RECEIPT |
+                        ERROR deriving Show
+
+-- |An abstract data type representing a STOMP Frame.
+-- It consists of a Command, Headers, and Body.
+data Frame          =   Frame Command Headers Body
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+The definition for the Frame datatype is contained within the Stomp.Frames module of the \textit{tehstomp-lib} library package.
+
+\section{Application Design \& Usage}
 
 \section{Conclusions}
-
-Conclusions and final thoughts (1-2 pages?)
 
 \section{Related Work}
 To date there has been relatively little work around transactional events aside from the foundational work done by
