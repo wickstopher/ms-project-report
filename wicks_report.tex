@@ -608,7 +608,7 @@ partialClientChoiceEvt
 The above code demonstrates the dynamic event construction for client choice. There are a few implementations details to take note of here. First, notice that the event is constructed using a recursive fold over the map of client subscriptions. The base case in the fold is a \textit{timeOutEvt} that returns \textit{Nothing} after a half second's wait. If there are no clients available to synchronize on the message within a half second, we retry the send, as it is possible that new subscribers have been registered in that time. If \textit{Nothing} is returned from this event, we simply fork off an update to the main processing loop. Also, notice the \textit{sentClients} list; this list contains all those client identifiers of clients to whom the message was sent and subsequently NACK'd (disacknowledged). We do not want to continually send a message to a client that has already rejected the message, so we maintain a running list in the \textit{AckContext} and use it here to avoid doing so.
 \subsection{The Transaction Module}
 
-The \textit{Transaction} module exports a \textit{ClientTransactionManager} to each client thread that is used to report updates to client transactions. It uses the same state management pattern described in the section on the \textit{Subscriptions} module to maintain what could potentially be multiple ongoing transactions for a single client. When a BEGIN frame is received, a transaction is initiated. We do so by inserting a unit \textit{alwaysEvt} into the mapping. As additional frames are received, the transactional event is constructed dynamically using the \textit{thenEvt} combinator. This ensures that when we synchronize on the final event, all component events occur in sequence. This also ensures that all component events synchronize in sequence \textit{atomically}, an important guarantee. They are not processed by the \textit{SubscriptionManager} asynchronously, but no other events are processed until all events in the transaction composite are processed sequentially. Such a composite event, in which two messages are sent as part of a transaction, would look something like this:
+The \textit{Transaction} module exports a \textit{ClientTransactionManager} to each client thread that is used to report updates to client transactions. It uses the same state management pattern described in the section on the \textit{Subscriptions} module to maintain what could potentially be multiple ongoing transactions for a single client. When a BEGIN frame is received, a transaction is initiated. We do so by inserting a unit \textit{alwaysEvt} into the mapping. As additional frames are received, the transactional event is constructed dynamically using the \textit{thenEvt} combinator. This ensures that when we synchronize on the final event, all component events occur in sequence. This also ensures that all component events synchronize in sequence \textit{atomically}, an important guarantee. They are not processed by the \textit{SubscriptionManager} asynchronously; no other events are processed until all events in the transaction composite are processed sequentially. Such a composite event, in which two messages are sent as part of a transaction, would look something like this:
 
 \begin{minted}{text}
 \end{minted}
@@ -657,6 +657,26 @@ Instead of synchronizing on a single update and then using that to update the st
 
 The STOMP client implemented for this project is a basic command-line client. It is not particularly representative of ``real-world" usage of a STOMP client, but is rather intended for interactive demonstration of the capbabilities of the message broker.
 
+The approach to the client design is ``event-driven". There are multiple asynchronous state loops that send events to the main session loop, which handles them synchronously. We lclient has two state loops. There is the ``main" event loo
+
+\subsection{Client Commands}
+
+A listing and description of client commands in this application is given.
+
+\begin{itemize}
+    \item \textbf{connect [hostname] [port]}: connect to a STOMP broker on the given hostname/port combination.
+    \item \textbf{disconnect}: disconnect from an active session
+    \item \textbf{send [destination] [message]}: Send a text frame containing the given message to the given destination.
+    \item \textbf{sendr [destination] [receipt-id] [message]}: Send a text frame containig the given message to the given destination. Request a receipt with the given receipt-id.
+    \item \textbf{loopsend [n] [destination] [message]}: Send a text frame containing the given message to the given destination n times in a row.
+    \item \textbf{subscribe [destination]}: Subscribe to the given destination.
+    \item \textbf{unsubscribe [subscription-id]}: Unsubscribe from the subscription with the given subscription id.
+    \item \textbf{begin [tx-id]}: Begin a named transaction with the tx-id as the transaction identifier. All send and sendr commands prior to either a commit or an abort will be send as part of this transaction.
+    \item \textbf{commit}: Commit the transaction in process, if such exists.
+    \item \textbf{abort}: Abort the transaction in process, if such exists.
+    \item \textbf{subs}: List details about all active subscriptions
+    \item \textbf{exit}: Close the active session (if any) and exit the application.
+\end{itemize}
 \section{Conclusions}
 
 I have come to the conclusion that I know not what to write in conclusion here. 
