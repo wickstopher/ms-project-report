@@ -211,7 +211,7 @@ This interface is used by composing events using the provided event combinators:
 
 This program first synchronizes on the creation of a new synchronous communications channel, forks off a thread that sends a String on the channel, and then blocks until it receives a String on the same channel, finally displaying it on the standard output. Note that if we were to attempt to write this program without forking off the send to take place in a new thread, the initial synchronization on \textit{sendEvt} would block indefinitely.
 
-One of the primary attributes of transactional events that makes them an attractive tool for concurrent programming, and the one that sets the idiom apart from the similar message-passing style found in CML, is the fact that they are easily composable due to their monadic structure. As seen here, in the Haskell implementation the \textit{Evt} typeclass is a subclass of both \textit{Monad} and \textit{MonadPlus}. This allows for easy sequencing of events utilizing Haskell's \textit{do} notation, as the monadic bind is implemented as the \textit{thenEvt} combinator. Using this combinator, one can compose an event comprised of smaller events that must be able to complete in sequence. If any individual event in the composite is unable to complete, the entire event ``fizzles" without any side-effects that are observable by the rest of the system, providing transactional guarantee for event synchronization.
+One of the primary attributes of transactional events that makes them an attractive tool for concurrent programming, and the one that sets the idiom apart from the similar message-passing style found in CML, is the fact that they are easily composable due to their monadic structure. As seen here, in the Haskell implementation the \textit{Evt} typeclass is a subclass of both \textit{Monad} and \textit{MonadPlus}. This allows for easy sequencing of events utilizing Haskell's \textit{do} notation, as the monadic bind is implemented as the \textit{thenEvt} combinator. Using this combinator, one can compose an event comprised of smaller events that must be able to complete in sequence. If any individual event in the composite is unable to complete, the entire event ``fizzles" without any side-effects that are observable by the rest of the system, providing a transactional guarantee for event synchronization.
 
 The interface also provides a non-deterministic choice combinator in the form of \textit{chooseEvt}. This allows an event to synchronize on whichever of the two events it is able to synchronize on first, effectively aborting the computations performed in the event that is not chosen. Note that \textit{neverEvt} is the event that can never be synchronized upon. Hence, sequencing a \textit{neverEvt} using the monadic bind is an effective abort. Likewise, the \textit{chooseEvt}, as it cannot choose an event that will not successfully complete, will never synchronize on the \textit{neverEvt}.
 
@@ -392,7 +392,7 @@ Since the protocol dictates that the sender delivers either a frame or a heartbe
 
 \textit{[Note to the early reader of this report: there are aspects of this system that are still not quite complete, but will be for the final project]}
 
-One can envision a client application in which multiple system components are interested in the different types of frames that are received from the server. As part of the \textit{tehstomp-lib} library, we provide a client-centric event management system, wrapping a \textit{FrameHandler}, that routes frames to registered listeners. The exported API is given as follows:
+One can envision a client application in which multiple system components are interested in the different types of frames that are received from the server. As part of the \textit{tehstomp-lib} library, we provide a client-centric (in that it would be not suitable for use in a server implementation) event management system, wrapping a \textit{FrameHandler}, that routes frames to registered listeners. The exported API is given as follows:
 
 \begin{minted}{text}
 \end{minted}
@@ -428,13 +428,78 @@ requestErrorEvents ::
 \begin{minted}{text}
 \end{minted}
 
-Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandler}, interested system components can use it to obtain dedicated event channels. The \textit{FrameRouter} maintains lists of those channels, and when a relevant \textit{FrameEvt} is received, it is broadcast to all registered listeners. Clients can register for frames that are sent to individual subscriptions (MESSAGE), frames that are sent as responses (CONNECTED, RECEIPT), or ERROR frames. Per-frame processing for each registered channel is handled on a separate thread, so that no individual registered component is able to hold up processing for any of the other registered components.
+Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandler}, interested system components can use it to obtain dedicated event channels. The \textit{FrameRouter} maintains lists of those channels, and when a relevant \textit{FrameEvt} is received, it is broadcast to all registered listeners. Clients can register for frames that are sent to individual subscriptions (MESSAGE), frames that are sent as responses (CONNECTED, RECEIPT), or ERROR frames. They can also request to receive heart-beats. Per-frame processing for each registered channel is handled on a separate thread, so that no individual registered component is able to hold up processing for any of the other registered components.
 
 \subsection{Additional Modules}
 There are a few additional modules exported by the library that do not have to do with STOMP directly, but are useful nonetheless and are mentioned here in brief. The \textit{Stomp.TLogger} module implements a transactional ``logger", similar but simpler in concept and design to that of the \textit{FrameHandler}. The \textit{Stomp.Increment} module implements a stateful incrementer, and was motivated by the need for an unbounded value for generating unique message identifiers across the lifetime of a server instance. In earlier phases of the implementation, the application was using the \textit{Data.Unique} package for generating message identifiers, but the values produced by such hash out to a bounded \textit{Int} datatype. In principle, depending on the compiler, the upper bound on the values produced could be as low as \begin{math}2^{28}\end{math} \cite{data:int}, which is likely to be insufficient for a long-running, high-activity server. In practice, most implementations place a much higher upper bound on the \textit{Int} type, but the \textit{Integer} type is unbounded in Haskell, making it a more attractive candidate for such identifiers.
 \section{Application Design \& Usage}
 
+Two applications were developed using transactional events, along with the \textit{tehstomp-lib} libraries developed as part of this project: a basic, command-line STOMP client, and a STOMP message broker.
+
+\subsection{The STOMP Broker}
+
+At the core of the STOMP broker is a looping function over an open socket. The function loops as connections are received, and forks off a new thread to negotiate each incoming connection request. 
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+socketLoop :: 
+    Socket -> 
+    Logger -> 
+    SubscriptionManager ->
+    Incrementer -> 
+    IO ()
+socketLoop sock console subManager inc = do
+    (uSock, _) <- accept sock
+    addr <- getPeerName uSock
+    log console $ "New connection received from " 
+        ++ (show addr)
+    handle <- socketToHandle uSock ReadWriteMode
+    hSetBuffering handle NoBuffering
+    frameHandler <- initFrameHandler handle
+    forkIO $ negotiateConnection frameHandler 
+        (addTransform (appendTransform 
+            ("[" ++ show addr ++ "]")) console)
+                subManager inc
+    socketLoop sock console subManager inc
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+If protocol negotiations are successful, the handle remains open, and the thread loops waiting for frames and heartbeats from the client. The connection data for a given client is encapsulated in the \textit{Connection} datatype:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+-- |Encapsulation of a single client's connection data
+data Connection      = Connection 
+                         ClientId 
+                         FrameHandler 
+                         ClientTransactionManager 
+                         Int
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+The \textit{ClientId} is a unique identifier for the client that is to be used in the \textit{SubscriptionManager}. The server has a single stateful \textit{Incrementer} that it uses to generate unique client identifiers. The \textit{FrameHandler} is constructed using the \textit{Handle} obtained from the socket connection. The \textit{ClientTransactionManager} is a dedicated transaction manager for that client, and the \textit{Int} is the frequency with which heart-beats are expected to be received from the client. The \textit{ClientTransactionManager} contains a stateful loop that is maintained per-client, as the rest of the system doesn't need to be aware of pending client transactions. The \textit{ClientTransactionManager} will be discussed in more detail in the subsection dealing with the \textit{Transaction} module.
+
+The server itself maintains a separate stateful loop in the \textit{SubscriptionManager}. The \textit{SubscriptionManager} is a per-broker singleton that manages all of the subscriptions for all of the clients across that server. As clients subscribe to destinations, the \textit{SubscriptionManager} is updated with that information.
+
+\subsection{The Subscriptions Module}
+
+The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that client threads use to report updates to client subscriptions. 
+
+\subsection{The Transaction Module}
+
+The \textit{Transaction} module exports a \textit{ClientTransactionManager} that the client thread uses to report updates to client transactions.
+
+\subsection{The STOMP Client}
+
+The STOMP client implemented for this project is a basic command-line client. It is not particularly representative of ``real-world" usage of a STOMP message broker, but is rather intended for interactive demonstration of the capbabilities of the message broker.
+
 \section{Conclusions}
+
+I have come to the conclusion that I know not what to write in conclusion here.
 
 \section{Related Work}
 To date there has been relatively little work around transactional events aside from the foundational work done by
