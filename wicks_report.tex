@@ -159,6 +159,7 @@ The first value in the heart-beat header indicates that the client is able to se
 Note that the value of zero indicates that the server will not be sending heart-beats, even if it did support such, as the client has requested not to receive them. The value of 10000 indicates that based on the client's capabilities and its own expectations that it expects to receive either a heartbeat every 10000 milliseconds (the maximum value between the client's send rate and its own receive rate). Also note that heart-beating capabilities are dictated by the client. A server is free to reject a client if its heart-beating capabilities are not up to its minimum requirements, but this is an implementation detail and is not dictated by the protocol.
 
 \section{Transactional Events}
+\setminted{fontsize=\scriptsize,baselinestretch=1}
 
 The basic transactional events interface given by Fluet and Donnelly \cite{te:original} is provided here for ease of reference:
 
@@ -192,7 +193,6 @@ The basic transactional events interface given by Fluet and Donnelly \cite{te:or
 
 This interface is used by composing events using the provided event combinators: \textit{thenEvt, alwaysEvt, chooseEvt}, and \textit{neverEvt}. We then use the \textit{sync} function to synchronize on an event. Said synchronization blocks until the event is able to complete, and the result is returned wrapped in the \textit{IO} monadic context. The synchronous channels allow us to create event channels that can be used to pass messages between concurrently executing threads. There are additional combinators, \textit{sendEvt} and \textit{recvEvt}, that allow the composition of events that pass messages between multiple threads. Any send on a synchronous channel must be matched with a corresponding receive in another thread on the same channel in order to be able to synchronize. A simple "Hello, world!" program using transactional events can be constructed as follows:
 
-\setminted{fontsize=\footnotesize,baselinestretch=1}
 \begin{minted}{text}
 \end{minted}
 \begin{minted} {haskell}
@@ -223,7 +223,9 @@ The primary goal of this project was to implement a message broker, client softw
 
 \section{Library Design \& Usage}
 
-The initial challenge in implementing the shared libraries was in determing exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The Frame datastructure was broken down as follows, and was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle:
+\subsection{Stomp.Frames}
+
+The initial challenge in implementing the shared libraries was in determining exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The Frame datastructure was broken down as follows, and was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle:
 
 \begin{minted}{text}
 \end{minted}
@@ -273,8 +275,163 @@ data Frame          =   Frame Command Headers Body
 \begin{minted}{text}
 \end{minted}
 
-The definition for the Frame datatype is contained within the Stomp.Frames module of the \textit{tehstomp-lib} library package.
+The definition for the Frame datatype is contained within the \textit{Stomp.Frames} module of the \textit{tehstomp-lib} library package. Additionally, that module exports a plethora of utility functions for constructing, manipulating, and extracting information from Frames, including straightforward constructions for all of the commands with their required headers. Utilizing this interface it is simple for clients of the library to construct any possible STOMP frame.
 
+\subsection{Stomp.Frames.IO}
+
+Another module provided by the \textit{tehstomp-lib} package is called \textit{Stomp.Frames.IO}. This module encapsulates error-handling IO operations on Handles that are expected to be receiving STOMP frames. In most cases, this will be a Handle to a TCP socket connection in a STOMP client or broker, although any producer or consumer of STOMP frames could be handled using the library. The FrameHandler datatype utilizes transactional events to provide multiple asynchronous readers and writers with synchronous access to the underlying Handle as Frames are read and written. To achieve this, the datatype houses two synchronous channels (SChans). Clients obtain a FrameHandler by using the \textit{initFrameHandler} function. We obtain two synchronous channels, and then fork off looping threads that handle their processing:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+-- |Given a resource Handle, initialize a FrameHandler
+-- and return it in an IO context.
+initFrameHandler :: Handle -> IO FrameHandler
+initFrameHandler handle = do
+    writeChan <- sync newSChan
+    readChan  <- sync newSChan
+    wid <- forkIO $ writeLoop handle 0 writeChan
+    rid <- forkIO $ readLoop handle readChan
+    return $ FrameHandler handle writeChan readChan wid rid
+
+data FrameEvt = NewFrame Frame |
+                ParseError String |
+                Heartbeat |
+                GotEof |
+                TimedOut
+
+parseFrame :: Handle -> IO FrameEvt
+
+frameReaderLoop :: Handle -> SChan FrameEvt -> IO ()
+frameReaderLoop handle readChan = do
+    evt <- parseFrame handle
+    sync $ sendEvt readChan evt
+    case evt of 
+        NewFrame _ -> frameReaderLoop handle readChan
+        Heartbeat  -> frameReaderLoop handle readChan
+        -- Terminate the loop in the error case
+        otherwise  -> return ()
+
+-- |Get the next FrameEvt from the FrameHandler and return
+-- it in an Evt context.
+getEvt :: FrameHandler -> Evt FrameEvt
+getEvt (FrameHandler _ _ readChannel _ _) = 
+    recvEvt readChannel
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+
+The \textit{frameReaderLoop} function shown above loops waiting for input on a handle (the \textit{parseFrame} function), and then attempts to synchronize on its \textit{SChan}. When a client synchronizes on the \textit{getEvt} function, the synchronization occurs, the FrameEvt is returned in an IO context, and the next frame is parsed. The API takes a two-tiered approach. The bare Evt functions are exposed, along with functions that abstract the event synchronization away from the client (an analogous \textit{get} function is provided as well). This offers some flexibility in the construction of applications using these events.
+
+For readers that are expecting heart-beats, we offer an additional function that times out if no data is received on the Handle:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+getEvtWithTimeOut :: FrameHandler -> Int -> Evt FrameEvt
+getEvtWithTimeOut (FrameHandler _ _ readChannel _ _) timeOut = 
+    if timeOut < 1 then
+        recvEvt readChannel
+    else
+        (recvEvt readChannel) `chooseEvt` 
+            (timeOutEvt timeOut `thenEvt` 
+                (\_ -> alwaysEvt TimedOut))
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+The \textit{timeOutEvt} is part of the extended \textit{TxEvents} library detailed in \cite{te:original}. It is an event that becomes available for synchronization after a given number of microseconds has transpired. In this particular case, the \textit{timeOutEvt} is sequenced with an \textit{alwaysEvt} that will always return \textit{TimedOut}; note that the \textit{timeOutEvt} simply returns the unit value, and this particular function needs to return a \textit{TimeOutEvt}. This necessitates the usage of the \textit{thenEvt} sequencing combinator as shown above. Without the availability of this combinator, returning default values or specifying alternative control flows for timeouts in event processing would require much more complex logic. As it is, we can specify the ``next step" to take after a timeout simply and logically. When a client synchronizes on the \textit{getEvtWithTimeOut} event, if we have to wait longer than the given time allotment to receive an event on the read channel, the second choice is taken, and \textit{TimedOut} is returned to the client.
+
+The \textit{FrameHandler} abstraction also provides functionality for \textit{automatically} generating heartbeats if so needed. This allows the client of this library, be it a client or a server application, to simply ``set and forget" once initial negotiations have transpired.
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+data SendEvt  = SendFrame Frame |
+                UpdateHeartbeat Int |
+                DoHeartbeat
+
+-- |Puts the given Frame into the FrameHandler in an Evt context.
+putEvt :: Frame -> FrameHandler -> Evt ()
+putEvt frame (FrameHandler _ writeChan _ _ _) = 
+    sendEvt writeChan $ SendFrame frame
+
+-- |Update the rate at which this FrameHandler sends 
+-- heart-beats. A rate of 0 or less means that no 
+-- heart-beats will be transmitted. Otherwise, we 
+-- will send one heart-beat every n microseconds.
+updateHeartbeat :: FrameHandler -> Int -> IO ()
+updateHeartbeat (FrameHandler _ writeChan _ _ _) n = 
+    sync $ sendEvt writeChan (UpdateHeartbeat n)
+
+frameWriterLoop :: Handle -> Int -> SChan SendEvt -> IO ()
+frameWriterLoop handle freq writeChan = do
+    update <- if freq < 1 
+        then sync $ recvEvt writeChan
+        else sync $ (recvEvt writeChan) `chooseEvt` 
+            (timeOutEvt freq `thenEvt` 
+              (\_ -> alwaysEvt DoHeartbeat))
+    case update of
+        SendFrame frame -> do
+            hPut handle $ frameToBytes frame
+            frameWriterLoop handle freq writeChan
+        UpdateHeartbeat freq' -> do
+            hPut handle $ UTF.fromString "\n"
+            frameWriterLoop handle freq' writeChan
+        DoHeartbeat       -> do
+            hPut handle $ UTF.fromString "\n"
+            frameWriterLoop handle freq writeChan
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+Since the protocol dictates that the sender delivers either a frame or a heartbeat at least once per interval, and whether or not a sender is going to send a frame at some point during that interval is non-deterministic, we construct the event using the \textit{chooseEvt} combinator. This event will either send a frame if one is provided within the interval, or send a heartbeat after said interval has transpired without receiving any frames to transmit. We also provide a means for updating the heartbeat after the loop has been initiated. The reasoning for this is that it is likely that a client or server will want to use the FrameHandler in setting up heart-beating and protocol negotiations, so it will need to be initialized prior to the final frequency determination. This allows for those initial negotiations to take place and the heart-beating mechanism to be kicked off after the fact if necessary.
+
+\subsection{Stomp.Frames.IO.Router}
+
+\textit{[Note to the early reader of this report: there are aspects of this system that are still not quite complete, but will be for the final project]}
+
+One can envision a client application in which multiple system components are interested in the different types of frames that are received from the server. As part of the \textit{tehstomp-lib} library, we provide a client-centric event management system, wrapping a \textit{FrameHandler}, that routes frames to registered listeners. The exported API is given as follows:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+data RequestHandler = RequestHandler (SChan Update)
+
+initFrameRouter :: 
+  FrameHandler -> 
+  IO RequestHandler
+
+-- |Request a dedicated channel on which to receive
+-- CONNECTED and RECEIPT Frames
+requestResponseEvents :: 
+  RequestHandler -> 
+  IO (SChan FrameEvt)
+
+-- |Request a dedicated channel on which to receive
+-- MESSAGE frames for the given subscription ID
+requestSubscriptionEvents :: 
+  RequestHandler -> 
+  String -> IO (SChan FrameEvt)
+
+-- |Request a dedicated channel on which to receive
+-- heart-beats
+requestHeartbeatEvents :: 
+  RequestHandler -> 
+  IO (SChan FrameEvt)
+
+requestErrorEvents :: 
+  RequestHandler -> 
+  IO (SChan FrameEvt)
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandler}, interested system components can use it to obtain dedicated event channels. The \textit{FrameRouter} maintains lists of those channels, and when a relevant \textit{FrameEvt} is received, it is broadcast to all registered listeners. Clients can register for frames that are sent to individual subscriptions (MESSAGE), frames that are sent as responses (CONNECTED, RECEIPT), or ERROR frames. Per-frame processing for each registered channel is handled on a separate thread, so that no individual registered component is able to hold up processing for any of the other registered components.
+
+\subsection{Additional Modules}
+There are a few additional modules exported by the library that do not have to do with STOMP directly, but are useful nonetheless and are mentioned here in brief. The \textit{Stomp.TLogger} module implements a transactional ``logger", similar but simpler in concept and design to that of the \textit{FrameHandler}. The \textit{Stomp.Increment} module implements a stateful incrementer, and was motivated by the need for an unbounded value for generating unique message identifiers across the lifetime of a server instance. In earlier phases of the implementation, the application was using the \textit{Data.Unique} package for generating message identifiers, but the values produced by such hash out to a bounded \textit{Int} datatype. In principle, depending on the compiler, the upper bound on the values produced could be as low as \begin{math}2^{28}\end{math}, which is likely to be insufficient for a long-running, high-activity server. In practice, most implementations place a much higher upper bound on the \textit{Int} type, but the \textit{Integer} type is unbounded in Haskell, making it a more attractive candidate for such identifiers.
 \section{Application Design \& Usage}
 
 \section{Conclusions}
