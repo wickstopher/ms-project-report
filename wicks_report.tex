@@ -434,7 +434,7 @@ Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandle
 There are a few additional modules exported by the library that do not have to do with STOMP directly, but are useful nonetheless and are mentioned here in brief. The \textit{Stomp.TLogger} module implements a transactional ``logger", similar but simpler in concept and design to that of the \textit{FrameHandler}. The \textit{Stomp.Increment} module implements a stateful incrementer, and was motivated by the need for an unbounded value for generating unique message identifiers across the lifetime of a server instance. In earlier phases of the implementation, the application was using the \textit{Data.Unique} package for generating message identifiers, but the values produced by such hash out to a bounded \textit{Int} datatype. In principle, depending on the compiler, the upper bound on the values produced could be as low as \begin{math}2^{28}\end{math} \cite{data:int}, which is likely to be insufficient for a long-running, high-activity server. In practice, most implementations place a much higher upper bound on the \textit{Int} type, but the \textit{Integer} type is unbounded in Haskell, making it a more attractive candidate for such identifiers.
 \section{Application Design \& Usage}
 
-Two applications were developed using transactional events, along with the \textit{tehstomp-lib} libraries developed as part of this project: a basic, command-line STOMP client, and a STOMP message broker.
+Two applications were developed using transactional events, along with the \textit{tehstomp-lib} libraries developed as part of this project: a basic command-line STOMP client, and a STOMP message broker.
 
 \subsection{The STOMP Broker}
 
@@ -466,7 +466,7 @@ socketLoop sock console subManager inc = do
 \begin{minted}{text}
 \end{minted}
 
-If protocol negotiations are successful, the handle remains open, and the thread loops waiting for frames and heartbeats from the client. The connection data for a given client is encapsulated in the \textit{Connection} datatype:
+If protocol negotiations are successful, the handle remains open, and the thread loops waiting for frames and heartbeats from the client until the client disconnects. The connection data for a given client is encapsulated in the \textit{Connection} datatype:
 
 \begin{minted}{text}
 \end{minted}
@@ -487,19 +487,98 @@ The server itself maintains a separate stateful loop in the \textit{Subscription
 
 \subsection{The Subscriptions Module}
 
-The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that client threads use to report updates to client subscriptions. 
+The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that client threads use to report updates to client subscriptions. Subscription handling is the most complex portion of the system. Initialization of the \textit{SubscriptionManager} involves forking off two separate stateful loops: one to maintain the state of active client subscriptions, and one to maintain the state of message acknowledgements:
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+
+type ClientId            = Integer
+type SubscriptionId      = String
+
+type SubMap = HashMap 
+  Destination (HashMap ClientId ClientSub)
+
+type ClientDests = HashMap 
+  ClientId (HashMap SubscriptionId Destination)
+
+data Subscriptions = Subscriptions SubMap ClientDests
+
+-- |Initialize a SubscriptionManager and return it in 
+-- an IO context.
+initManager :: IO SubscriptionManager
+initManager = do
+    updateChan <- sync newSChan
+    ackChan    <- sync newSChan
+    inc        <- newIncrementer
+    subs       <- return $ Subscriptions HM.empty HM.empty
+    forkIO $ updateLoop updateChan ackChan subs inc
+    forkIO $ ackLoop ackChan updateChan HM.empty
+    return $ SubscriptionManager updateChan
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+The \textit{Subscriptions} datatype houses the state that needs to be maintained in the \textit{updateLoop} function. It contains a \textit{SubMap}, which maps destinations to collections of client subscriptions. It also contains a datatype called \textit{ClientDests}. This is not strictly necessary, and makes for a somewhat more complex implementation, but there is a desirable tradeoff in efficiency for unsubscribe operations. The \textit{ClientDests} contains mappings of \textit{ClientId} and \textit{SubscriptionId} pairs to \textit{Destinations}. This is to enable fast unsubscribe operations:  \textit{O(log(n))} compared to \textit{O(d)}, where \textit{n} is the number of clients and \textit{d} is the number of active destinations. Using these two datastructures in conjunction, though somewhat complicated, precludes the need to search through all destinations to see if they countain the given mapping.
+
+The state of \textit{Subscriptions} is managed by abstracting all subscription operations through event-generating functions that send updates on the \textit{updateChan}. As SUBSCRIBE, UNSUBSCRIBE, and SEND frames are received, the client thread calls the appropriate update function and the \textit{updateLoop} adjusts the state of the data accordingly as part of processing the update. This is a broadly useful pattern when developing concurrent applications, as most useful programs need some way of maintaining running state in various components, and it is made exceptionally straightforward using transactional events.
+
+
+\begin{minted}{text}
+\end{minted}
+\begin{minted} {haskell}
+-- |General Update type for main processing loop
+data Update = 
+  Add Destination ClientSub |
+  Remove ClientId SubscriptionId |
+  GotMessage Destination Frame |
+  ResendMessage Destination Frame [ClientId] MessageId |
+  Ack ClientAckResponse |
+  Disconnected ClientId
+
+-- |State management loop for Subscriptions
+updateLoop :: 
+  SChan Update ->
+  Subscriptions -> 
+  IO ()
+updateLoop updateChan subs = do
+    update <- sync $ recvEvt updateChan
+    subs'  <- handleUpdate update subs
+    updateLoop updateChan subs'
+
+-- |Send a Frame to a Destination 
+-- (example of an exported update function)
+sendMessageEvt :: 
+  SubscriptionManager -> 
+  Destination -> 
+  Frame -> 
+  Evt ()
+sendMessageEvt 
+  manager@(SubscriptionManager updateChan) 
+  destination 
+  frame = 
+    sendEvt updateChan $ GotMessage destination frame
+\end{minted}
+\begin{minted}{text}
+\end{minted}
+
+The above code is a slight simplification of the update code in the \textit{Subscriptions} module (some parameters are left out for space considerations), but it is illustrative of how transactional events easily enable this pattern. It's incredibly straightforward to reason about and build such state management loops without the overhead of a heavyweight framework or convoluted imperative-style logic. The entire operation of maintaining state is abstracted into three basic operations: (1) wait for an update, (2) process the update  (3) return a modified state from the update processing. We have a loop that waits for updates on its synchronous channel. When one is received, it is processed by a function that returns a (potentially) modified subscription mapping. We then proceed to the next loop iteration with the updated state.
+
+\subsection{Client Selection in Message Processing}
+
+The distributed model enabled by the STOMP broker is that of a many clients acting as both producers and consumers. An individual message is produced buy one client and consumed by another. There are other possible implementation-specific behaviors (such as one-to-many broadcast) that are not strictly dictated by the protocol, but those have not been implemented for this project. One client produces a message and delivers it to a destination; some other client, acting as a consumer, subscribes to a destination, advertising its willingness to process messages sent to that destination. As there could potentially be multiple clients subscribed to a single destination, the broker needs some mechanism by which to choose the ``most eligible" client for consumption of a given message.
 
 \subsection{The Transaction Module}
 
-The \textit{Transaction} module exports a \textit{ClientTransactionManager} that the client thread uses to report updates to client transactions.
+The \textit{Transaction} module exports a \textit{ClientTransactionManager} that the client thread uses to report updates to client transactions. We export only these functions from the module.
 
 \subsection{The STOMP Client}
 
-The STOMP client implemented for this project is a basic command-line client. It is not particularly representative of ``real-world" usage of a STOMP message broker, but is rather intended for interactive demonstration of the capbabilities of the message broker.
+The STOMP client implemented for this project is a basic command-line client. It is not particularly representative of ``real-world" usage of a STOMP client, but is rather intended for interactive demonstration of the capbabilities of the message broker.
 
 \section{Conclusions}
 
-I have come to the conclusion that I know not what to write in conclusion here.
+I have come to the conclusion that I know not what to write in conclusion here. 
 
 \section{Related Work}
 To date there has been relatively little work around transactional events aside from the foundational work done by
