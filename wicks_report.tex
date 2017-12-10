@@ -76,28 +76,13 @@ Message Oriented Middleware, STOMP
 \IEEEpeerreviewmaketitle
 
 \section{Introduction}
+
 Transactional events are a relatively recent concurrency abstraction in the functional programming
-paradigm. They are a high-level abstraction that combine the first-class synchronous message-passing events
-of Concurrent ML (CML) with all-or-nothing transactions \cite{te:original}. Their inception draws
-inspiration from CML, Concurrent Haskell, and Software Transactional Memory (STM) Haskell. There currently 
-exist implementations as language extensions for both Haskell \cite{te:original} and ML \cite{te:ml}.
+paradigm that allow inter-thread communications to be composed as all-or-nothing transactions. STOMP, the Simple (or Streaming) Text Oriented Message Protocol, is a text-based message passing protocol from the same school of design as HTTP \cite{stomp:spec}. It is designed so that applications in a distributed software system can communicate easily (from the perspective of an application developer) over a network. 
 
-Transactional events are primarily motivated by the need for better abstractions in the development of 
-concurrent programs. The non-deterministic execution order of concurrent programs makes them inherently
-difficult to reason about. Transactional events help to ease some of the pain by allowing for inter-thread
-communications to be composed of modular events in the form of transactions.
-
-STOMP, the Simple (or Streaming) Text Oriented Message Protocol, is a text-based message passing protocol from the same school of design as HTTP.
-\cite{stomp:spec}. It is designed so that applications in a distributed software system can communicate easily (from the 
-perspective of an application developer) over a network.
-
-``Every programming model needs three things: a semantics, an implementation, and useful idioms" 
-\cite{te:idioms}. The semantics and the implementation have been provided in the work laid out in \cite{te:original}.
-In this work, we explore the use of transactional events in the implementation and API design of a
-collection of software tools and applications utilizing the STOMP protocol. We implement a client 
-API, an command-line client application, a message broker (server), and shared libraries utilizing 
+In this work, the use of an experimental transactional events library is explored in the implementation and API design of a collection of software tools and applications that implement the STOMP protocol. We implement a client API, a command-line client application, a message broker (server), and shared libraries utilizing 
 Transactional Events Haskell (TE Haskell). In particular, we identify useful idioms, patterns,
-and interesting use cases for transactional events as a programming model.
+and interesting use cases for transactional events as a programming model, and establish the model as an approach that is well-suited to the implementation of large-scale software projects that must leverage concurrency.
 
 \section{The STOMP Protocol}
 
@@ -177,7 +162,19 @@ The first value in the heart-beat header indicates that the client is able to se
 Note that the value of zero indicates that the server will not be sending heart-beats, even if it did support such, as the client has requested not to receive them. The value of 10000 indicates that based on the client's capabilities and its own expectations that it expects to receive either a heartbeat every 10000 milliseconds (the maximum value between the client's send rate and its own receive rate). Also note that heart-beating capabilities are dictated by the client. A server is free to reject a client if its heart-beating capabilities are not up to its minimum requirements, but this is an implementation detail and is not dictated by the protocol.
 
 \section{Transactional Events}
+
 \setminted{fontsize=\scriptsize,baselinestretch=1}
+
+Transactional events are a high-level abstraction that combine the first-class synchronous message-passing events of Concurrent ML (CML) with all-or-nothing transactions \cite{te:original}. Their inception draws
+inspiration from CML, Concurrent Haskell, and Software Transactional Memory (STM) Haskell. There currently 
+exist implementations as language extensions for both Haskell \cite{te:original} and ML \cite{te:ml}.
+
+Transactional events are primarily motivated by the need for better abstractions in the development of 
+concurrent programs. The non-deterministic execution order of concurrent programs makes them inherently
+difficult to reason about. Transactional events help to ease some of the pain by allowing for inter-thread
+communications to be composed of modular events in the form of transactions.
+
+\subsection{Haskell Interface}
 
 The basic transactional events interface given by Fluet and Donnelly \cite{te:original} is provided in Figure \ref{monadcode} for ease of refernece.
 
