@@ -193,6 +193,7 @@ communications to be composed of modular events in the form of transactions.
 The basic transactional events interface given by Fluet and Donnelly \cite{te:original} is provided in Figure \ref{monadcode} for ease of refernece.
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
         data Evt a
 
@@ -217,12 +218,12 @@ The basic transactional events interface given by Fluet and Donnelly \cite{te:or
     \end{minted}
     \caption{The Evt Monad}
     \label{monadcode}
-    \centering
 \end{figure}
 
 This interface is used by composing events using the provided event combinators: \textit{thenEvt, alwaysEvt, chooseEvt}, and \textit{neverEvt}. We then use the \textit{sync} function to synchronize on an event. Said synchronization blocks until the event is able to complete, and the result is returned wrapped in the \textit{IO} monadic context. The synchronous channels allow us to create event channels that can be used to pass messages between concurrently executing threads. There are additional combinators, \textit{sendEvt} and \textit{recvEvt}, that allow the composition of events that pass messages between multiple threads. Any send on a synchronous channel must be matched with a corresponding receive in another thread on the same channel in order to be able to synchronize. A simple "Hello, world!" program using transactional events can be constructed as demonstrated in Figure \ref{helloworld}.
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
       import Control.Concurrent
       import Control.Concurrent.TxEvent
@@ -235,7 +236,6 @@ This interface is used by composing events using the provided event combinators:
         putStrLn s
     \end{minted}
     \caption{"Hello, World!" Using Transactional Events}
-    \centering
     \label{helloworld}
 \end{figure}
 
@@ -254,6 +254,7 @@ Using this interface, one can easily compose sophisticated computational event s
 The initial challenge in implementing the shared libraries was in determining exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The Frame data type was designed as shown in Figure \ref{frame}, and was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle.
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     -- |A HeaderName is a type synonym for String, and 
     -- is one component of a Header
@@ -299,7 +300,6 @@ The initial challenge in implementing the shared libraries was in determining ex
     \end{minted}
     \caption{The Frame Data Type}
     \label{frame}
-    \centering
 \end{figure}
 
 The definition for the Frame datatype is contained within the \textit{Stomp.Frames} module of the \textit{tehstomp-lib} library package (see \textit{Appendix A}). Additionally, that module exports a plethora of utility functions for constructing, manipulating, and extracting information from Frames, including straightforward constructions for all of the commands with their required headers. Utilizing this interface it is simple for clients of the library to construct any possible STOMP frame.
@@ -309,6 +309,7 @@ The definition for the Frame datatype is contained within the \textit{Stomp.Fram
 Another module provided by the \textit{tehstomp-lib} package is called \textit{Stomp.Frames.IO}. This module encapsulates error-handling IO operations on Handles that are expected to be receiving STOMP frames. In most cases, this will be a Handle to a TCP socket connection in a STOMP client or broker, although any producer or consumer of STOMP frames could be handled using the library. The FrameHandler datatype utilizes transactional events to provide multiple asynchronous readers and writers with synchronous access to the underlying Handle as Frames are read and written. To achieve this, the datatype houses two synchronous channels (SChans). Clients obtain a FrameHandler by using the \textit{initFrameHandler} function. We obtain two synchronous channels, and then fork off looping threads that handle their processing (see Figure \ref{framehandler}).
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     -- |Given a resource Handle, initialize a FrameHandler
     -- and return it in an IO context.
@@ -344,7 +345,6 @@ Another module provided by the \textit{tehstomp-lib} package is called \textit{S
     getEvt (FrameHandler _ _ readChannel _ _) = 
         recvEvt readChannel
     \end{minted}
-    \centering
     \caption{The FrameHandler}
     \label{framehandler}
 \end{figure}
@@ -373,6 +373,7 @@ The \textit{timeOutEvt} is part of the extended \textit{TxEvents} library detail
 The \textit{FrameHandler} abstraction also provides functionality for \textit{automatically} generating heartbeats if so needed (see Figure \ref{send-heartbeat}). This allows the client of this library, be it a client or a server application, to simply ``set and forget" once initial negotiations have transpired.
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     data SendEvt  = SendFrame Frame |
                     UpdateHeartbeat Int |
@@ -409,7 +410,6 @@ The \textit{FrameHandler} abstraction also provides functionality for \textit{au
                 hPut handle $ UTF.fromString "\n"
                 frameWriterLoop handle freq writeChan
     \end{minted}
-    \centering
     \caption{Heart-beat Management for Senders}
     \label{send-heartbeat}
 \end{figure}
@@ -423,6 +423,7 @@ Since the protocol dictates that the sender delivers either a frame or a heartbe
 One can envision a client application in which multiple system components are interested in the different types of frames that are received from the server. As part of the \textit{tehstomp-lib} library, we provide a client-centric (in that it would be not suitable for use in a server implementation) event management system, wrapping a \textit{FrameHandler}, that routes frames to registered listeners. The exported API is given in Figure \ref{framerouter}.
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     data RequestHandler = RequestHandler (SChan Update)
 
@@ -452,7 +453,6 @@ One can envision a client application in which multiple system components are in
       RequestHandler -> 
       IO (SChan FrameEvt)
     \end{minted}
-    \centering
     \caption{The FrameRouter API}
     \label{framerouter}
 \end{figure}
@@ -469,6 +469,7 @@ Two applications were developed using transactional events, along with the \text
 At the core of the STOMP broker is a looping function over an open socket. The function loops as connections are received, and forks off a new thread to negotiate each incoming connection request. 
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     socketLoop :: 
         Socket -> 
@@ -490,14 +491,15 @@ At the core of the STOMP broker is a looping function over an open socket. The f
                     subManager inc
         socketLoop sock console subManager inc
     \end{minted}
-    \centering
     \caption{STOMP Broker Socket Loop}
+    \label{socketloop}
 \end{figure}
 
 If protocol negotiations are successful, the handle remains open, and the thread loops waiting for frames and heartbeats from the client until the client disconnects. The connection data for a given client is encapsulated in the \textit{Connection} datatype:
 
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     -- |Encapsulation of a single client's connection data
     data Connection      = Connection 
@@ -506,7 +508,6 @@ If protocol negotiations are successful, the handle remains open, and the thread
                            ClientTransactionManager 
                            Int
     \end{minted}
-    \centering
     \caption{Client Connection Data}
     \label{connectiondata}
 \end{figure}
@@ -514,14 +515,16 @@ If protocol negotiations are successful, the handle remains open, and the thread
 
 The \textit{ClientId} is a unique identifier for the client that is to be used in the \textit{SubscriptionManager}. The server has a single stateful \textit{Incrementer} that it uses to generate unique client identifiers. The \textit{FrameHandler} is constructed using the \textit{Handle} obtained from the socket connection. The \textit{ClientTransactionManager} is a dedicated transaction manager for that client, and the \textit{Int} is the frequency with which heart-beats are expected to be received from the client. The \textit{ClientTransactionManager} contains a stateful loop that is maintained per-client, as the rest of the system doesn't need to be aware of pending client transactions. The \textit{ClientTransactionManager} will be discussed in more detail in the subsection dealing with the \textit{Transaction} module.
 
-\ifCLASSINFOpdf
     \begin{figure}[h]
         \centering
-        \includegraphics[scale=.30]{architecture.pdf}
+        \ifCLASSINFOpdf
+            \includegraphics[scale=.30]{architecture.pdf}
+        \else
+        \fi
         \caption{STOMP Broker Architecture}
+        \label{architecture}
     \end{figure}
-\else
-\fi
+
 
 The server itself maintains a separate stateful loop in the \textit{SubscriptionManager}. The \textit{SubscriptionManager} is a singleton that manages all of the subscriptions for all of the clients across that server. As clients subscribe to destinations, the \textit{SubscriptionManager} is updated with that information.
 
@@ -529,16 +532,19 @@ The server itself maintains a separate stateful loop in the \textit{Subscription
 
 The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that client threads use to report updates to client subscriptions. Subscription handling is the most complex portion of the system. Initialization of the \textit{SubscriptionManager} involves forking off two separate stateful loops: one to maintain the state of active client subscriptions, and one to maintain the state of message acknowledgements.
 
-\ifCLASSINFOpdf
-    \begin{figure}[h]
-        \centering
+\begin{figure}[h]
+    \centering
+    \ifCLASSINFOpdf
         \includegraphics[scale=.30]{state_management.pdf}
-        \caption{State Management Workflow}
-    \end{figure}
-\else
-\fi
+    \else
+    \fi
+    \caption{State Management Workflow}
+    \label{statemgmt}
+\end{figure}
+
 
 \begin{figure}[h]
+    \centering
     \begin{minted} {haskell}
     type ClientId            = Integer
     type SubscriptionId      = String
@@ -563,8 +569,8 @@ The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that cl
         forkIO $ ackLoop ackChan updateChan HM.empty
         return $ SubscriptionManager updateChan
     \end{minted}
-    \centering
     \caption{Forking State Loops in the SubscriptionManager}
+    \label{forking}
 \end{figure}
 
 The \textit{Subscriptions} datatype houses the state that needs to be maintained in the \textit{updateLoop} function. It contains a \textit{SubMap}, which maps destinations to collections of client subscriptions. It also contains a datatype called \textit{ClientDests}. This is not strictly necessary, and makes for a somewhat more complex implementation, but there is a desirable tradeoff in efficiency for unsubscribe operations. The \textit{ClientDests} contains mappings of \textit{ClientId} and \textit{SubscriptionId} pairs to \textit{Destinations}. This is to enable fast unsubscribe operations:  \textit{O(log(n))} compared to \textit{O(d)}, where \textit{n} is the number of clients and \textit{d} is the number of active destinations. Using these two datastructures in conjunction, though somewhat complicated, precludes the need to search through all destinations to see if they countain the given mapping.
@@ -572,6 +578,7 @@ The \textit{Subscriptions} datatype houses the state that needs to be maintained
 The state of \textit{Subscriptions} is managed by abstracting all subscription operations through event-generating functions that send updates on the \textit{updateChan}. As SUBSCRIBE, UNSUBSCRIBE, and SEND frames are received, the client thread calls the appropriate update function and the \textit{updateLoop} adjusts the state of the data accordingly as part of processing the update. This is a broadly useful pattern when developing concurrent applications, as most useful programs need some way of maintaining running state in various components, and it is made exceptionally straightforward using transactional events.
 
 \begin{figure}[h!]
+    \centering
     \begin{minted} {haskell}
     -- |General Update type for main processing loop
     data Update = 
@@ -605,7 +612,6 @@ The state of \textit{Subscriptions} is managed by abstracting all subscription o
       frame = 
         sendEvt updateChan $ GotMessage destination frame
     \end{minted}
-    \centering
     \caption{State Management for Subscriptions}
     \label{statemanagecode}
 \end{figure}
@@ -615,10 +621,15 @@ The code in Figure \ref{statemanagecode} is a slight simplification of the updat
 
 \subsection{Client Selection in Message Processing}
 
-The distributed model enabled by the STOMP broker is that of many clients acting as both producers and consumers. An individual message is produced by one client and consumed by another. There are other possible implementation-specific behaviors (such as one-to-many broadcast) that are not strictly dictated by the protocol. One client produces a message and delivers it to a destination; some other client, acting as a consumer, subscribes to a destination, advertising its willingness to process messages sent to that destination. As there could potentially be multiple clients subscribed to a single destination, the broker needs some mechanism by which to choose the ``most eligible" client for consumption of a given message. We can imagine several possible approaches to this problem. We could choose a client at random, but we run the risk of that client being blocked on some other operation. We could implement a "round-robin" approach, where every client gets a turn, but we run into the same risk; the chosen client might be blocked. One could imagine that there exists a complicated suitability heuristic, but it is difficult to ascertain how that would read in code.  Transactional events can make this choice straightforward to implement using the non-deterministic \textit{chooseEvt} combinator. Events can be constructed dynamically from a map containing client channels. When we synchronize on the event, the first client thread that is able to complete the transaction will do so, with all other events aborting without having sent the message to their respective clients.
+The distributed model enabled by the STOMP broker is that of many clients acting as both producers and consumers. An individual message is produced by one client and consumed by another. There are other possible implementation-specific behaviors (such as one-to-many broadcast) that are not strictly dictated by the protocol. One client produces a message and delivers it to a destination; some other client, acting as a consumer, subscribes to a destination, advertising its willingness to process messages sent to that destination. As there could potentially be multiple clients subscribed to a single destination, the broker needs some mechanism by which to choose the ``most eligible" client for consumption of a given message. 
+
+We can imagine several possible approaches to this problem. We could choose a client at random, but we run the risk of that client being blocked on some other operation. We could implement a "round-robin" approach, where every client gets a turn, but we run into the same risk; the chosen client might be blocked. One could imagine that there exists a complicated suitability heuristic, but it is difficult to ascertain how that would read in code. It most certainly would not be straightforward, as it would necessitate logic for making an attempt, handling individual attempt failures, and canceling attempted sends that were in-progress. Additionally, we would somehow need to guarantee that we are able to cancel an in-progress send in a timely manner: we could very easily end up with a race condition in which two clients consume the message; such logic would need to be handled very carefully, and it is reasonably safe to assume that the resultant code would be difficult to reason about.
+
+Transactional events can be leveraged to make this choice straightforward to implement using the non-deterministic \textit{chooseEvt} combinator. Events can be constructed dynamically from a map containing client channels. When we synchronize on the event, the first client thread that is able to complete the transaction will do so, with all other events aborting without having sent the message to their respective clients thanks to the transactional guarantee provided by the semantics of transactional events.
 
 \begin{figure}[h]
 \begin{minted} {haskell}
+\centering
 clientChoiceEvt :: 
   Frame -> 
   MessageId -> 
@@ -650,22 +661,22 @@ partialClientChoiceEvt
             (putEvt frame' frameHandler) 
                 `thenEvt` (\_ -> alwaysEvt $ Just sub)
 \end{minted}
-\centering
 \caption{Nondeterministic Choice of Consumer}
+\label{nondtchoice}
 \end{figure}
 
-The above code demonstrates the dynamic event construction for client choice. There are a few implementations details to take note of here. First, notice that the event is constructed using a recursive fold over the map of client subscriptions. The base case in the fold is a \textit{timeOutEvt} that returns \textit{Nothing} after a half second's wait. If there are no clients available to synchronize on the message within a half second, we retry the send, as it is possible that new subscribers have been registered in that time. If \textit{Nothing} is returned from this event, we simply fork off an update to the main processing loop. Also, notice the \textit{sentClients} list; this list contains all those client identifiers of clients to whom the message was sent and subsequently NACK'd (disacknowledged). We do not want to continually send a message to a client that has already rejected the message, so we maintain a running list in the \textit{AckContext} and use it here to avoid doing so.
+The code in Figure \ref{nondtchoice} demonstrates the dynamic event construction for client choice. There are a few implementations details to take note of here. First, notice that the event is constructed using a recursive fold over the map of client subscriptions. The base case in the fold is a \textit{timeOutEvt} that returns \textit{Nothing} after a half second's wait. If there are no clients available to synchronize on the message within a half second, we retry the send, as it is possible that new subscribers have been registered in that time. If \textit{Nothing} is returned from this event, we simply fork off an update to the main processing loop. Also, notice the \textit{sentClients} list; this list contains all those client identifiers of clients to whom the message was sent and subsequently NACK'd (disacknowledged). We do not want to continually send a message to a client that has already rejected the message, so we maintain a running list in the \textit{AckContext} and use it here to avoid doing so.
 \subsection{The Transaction Module}
 
-The \textit{Transaction} module exports a \textit{ClientTransactionManager} to each client thread that is used to report updates to client transactions. It uses the same state management pattern described in the section on the \textit{Subscriptions} module to maintain what could potentially be multiple ongoing transactions for a single client. When a BEGIN frame is received, a transaction is initiated. We do so by inserting a unit \textit{alwaysEvt} into the mapping. As additional frames are received, the transactional event is constructed dynamically using the \textit{thenEvt} combinator. This ensures that when we synchronize on the final event, all component events occur in sequence. This also ensures that all component events synchronize in sequence \textit{atomically}, an important guarantee. They are not processed by the \textit{SubscriptionManager} asynchronously; no other events are processed until all events in the transaction composite are processed sequentially. Such a composite event, in which two messages are sent as part of a transaction, would look something like this:
+The \textit{Transaction} module exports a \textit{ClientTransactionManager} to each client thread that is used to report updates to client transactions. It uses the same state management pattern described in the section on the \textit{Subscriptions} module to maintain what could potentially be multiple ongoing transactions for a single client. When a BEGIN frame is received, a transaction is initiated. We do so by inserting a unit \textit{alwaysEvt} into the mapping. As additional frames are received, the transactional event is constructed dynamically using the \textit{thenEvt} combinator. This ensures that when we synchronize on the final event, all component events occur in sequence. This also ensures that all component events synchronize in sequence \textit{atomically}, an important guarantee. They are not processed by the \textit{SubscriptionManager} asynchronously; no other events are processed until all events in the transaction composite are processed sequentially. Such a composite event, in which two messages are sent as part of a transaction, would look similar to the code representation in Figure \ref{compositevt}.
 
 \begin{figure}[h]
+\centering
 \begin{minted} {haskell}
 alwaysEvt ()
     `thenEvt` ((\_ -> sendMessageEvt subManager d1 f1)
         (`thenEvt` (\_ -> sendMessageEvt subManager d2 f2)))
 \end{minted}
-\centering
 \caption{Composite Transactional Event For a STOMP Transaction}
 \label{compositevt}
 \end{figure}
@@ -673,6 +684,7 @@ alwaysEvt ()
 There is something subtle in the construction of this event that may not be immediately apparent. In order for this event to synchronize, the \textit{SubscriptionManager} must support the ability to receive multiple updates in one synchronization. Recall the implementation of the \textit{updateLoop} function in the section detailing the \textit{SubscriptionManager}. Given that implementation, only one update is possible per event synchronization. As such, our event will compile, but will block indefinitely on synchronization, as the server will be waiting for the first update syncrhonization to complete prior to looping through and accepting the next update. The addition of transaction handling hence required an update to the \textit{SubscriptionManager} to support such updates. Kehrt, Effinger-Dean, Schmitz, and Grossman identify this particular issue in \cite{te:idioms}, and their solution pattern is applied here successfully. We make the following change to the \textit{updateLoop} function in the \textit{Subscriptions} module (once again the code, in particular the number of parameters, is slightly simplified for purposes of demonstration):
 
 \begin{figure}[h]
+\centering
 \begin{minted} {haskell}
 -- |State management loop for Subscriptions
 updateLoop :: 
@@ -697,8 +709,8 @@ updateEvtLoop updateChan subs = do
     (alwaysEvt subs') `chooseEvt` 
         (updateEvtLoop updateChan subs')
 \end{minted}
-\centering
 \caption{Looping Transactional Event}
+\label{loopingtxevt}
 \end{figure}
 
 Instead of synchronizing on a single update and then using that to update the state of the subscriptions, we create a composite event that has the ability to synchronize on arbitrarily many sequential updates, returning updated subscriptions with each iteration. We achieve this through use of the sequencing monadic bind (recall that this uses the \textit{thenEvt} combinator) and the \textit{chooseEvt} combinator. The event must first receive an update on the channel, then handle the update, and then either receive another update or complete and return the updated \textit{Subscriptions}. One might, upon first glance, wonder whether this functions as we would expect due to the non-deterministic nature of the \textit{chooseEvt} combinator. However, since we are sequencing the event using Haskell's \textit{do} notation, every event in the sequence must be able to complete. If the initiating event were a sequence of sends on the \textit{updateChan}, the composite would not be able to complete if the \textit{alwaysEvt} were chosen, so the semantics of transactional events dictates that the \textit{updateEvtLoop} choice \textit{must} be taken until there are no more sends that need to be matched, at which point the \textit{alwaysEvt} will be chosen and the final result returned.
@@ -741,6 +753,8 @@ transactional events, and propose idiomatic approaches to these issues in their 
 
 \bibliographystyle{IEEEtran}
 \bibliography{IEEEabrv,citations}
+\end{document}
+
 
 \begin{appendices}
 
@@ -763,4 +777,3 @@ transactional events, and propose idiomatic approaches to these issues in their 
 
 \end{appendices}
 
-\end{document}
