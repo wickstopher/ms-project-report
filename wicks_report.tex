@@ -105,7 +105,7 @@ The STOMP protocol is \textit{text-based}, with the command and header portion o
 \begin{minted}{text}
 \end{minted}
 
-In the STOMP protocol, connected clients act as either producers of messages, consumers of messages, or both (see Figure \ref{stompsend}). A client will send a message to a specific \textit{destination} using the SEND client frame; the message is then queued up for consumption by a subscriber. When a client subscribes to a given destination using the SUBSCRIBE frame, it registers itself with the broker as being a willing consumer of messages that are sent to that destination.
+In the STOMP protocol, connected clients act as either producers of messages, consumers of messages, or both (see Figure \ref{stompsend}). A client will send a message to a specific \textit{destination} using the SEND client frame; the message is then queued up for consumption by a \textit{subscriber}. When a client subscribes to a given destination by sending a SUBSCRIBE frame to the STOMP broker, it registers itself with the broker as a willing consumer of messages that are sent to that destination.
 
    \begin{figure}[h]
         \centering
@@ -129,6 +129,9 @@ The server only has 4 frames that it may send to a client. The CONNECTED frame a
 \subsection{Transactions}
 STOMP supports client-initated named transactions, in which it is requested that all messages sent as part of a given transaction are processed atomically by the server. STOMP brokers support the ability for a single client to have multiple ongoing transactions at any given time (the frames need not be sent atomically, or even successively), with the server keeping track of the state. Only SEND, ACK, and NACK frames may be part of a transaction, with the BEGIN, COMMIT, and ABORT frames managing the control. Whether or not a message is part of a transaction, or the specification of which transaction a control frame is referring to, is handled using the transaction frame header. An example of a SEND frame that is to be processed as part of the named transaction \textit{tx1} is given:
 
+
+\begin{minted}{text}
+\end{minted}
 \begin{minted}{text}
     SEND
     destination:q1
@@ -138,10 +141,14 @@ STOMP supports client-initated named transactions, in which it is requested that
 
     Hello, world!^@
 \end{minted}
+\begin{minted}{text}
+\end{minted}
 
 \subsection{Heart-beating}
 STOMP supports bidirectional heart-beats between the client and server. If heart-beats are expected, the sender must send either a frame or a heart-beat at least once every \textit{n} milliseconds. A heart-beat is represented by sending an end-of-line (EOL) character to the receiver. If a longer interval transpires without having received any data, the receiver may consider the connection lost and close it. The client will send, in the STOMP or CONNECT frame, the minimum rate of heart-beats that it is able to both send and receive, if any. The server then compares those values to its own capabilities, and chooses the longest interval (or, if either client or server does not wish to send or receive heartbeats, 0 is chosen). An example of the STOMP frame is given:
 
+\begin{minted}{text}
+\end{minted}
 \begin{minted}{text}
     STOMP
     accept-version:1.0,1.1,1.2
@@ -150,13 +157,20 @@ STOMP supports bidirectional heart-beats between the client and server. If heart
     
     ^@
 \end{minted}
+\begin{minted}{text}
+\end{minted}
 
 The first value in the heart-beat header indicates that the client is able to send heart-beats as quickly as once every 4000 milliseconds.  The second value in the heart-beat header indicates that the client does not wish to receive heart-beats from the server. If, for example, the server to which it is connecting only wishes to receive heart-beats every 10000 milliseconds, the corresponding CONNECTED acknowledgement would look as follows:
 
+
+\begin{minted}{text}
+\end{minted}
 \begin{minted}{text}
     CONNECTED
     accept-version:1.2
     heart-beat:0,10000
+\end{minted}
+\begin{minted}{text}
 \end{minted}
 
 Note that the value of zero indicates that the server will not be sending heart-beats, even if it did support such, as the client has requested not to receive them. The value of 10000 indicates that based on the client's capabilities and its own expectations that it expects to receive either a heartbeat every 10000 milliseconds (the maximum value between the client's send rate and its own receive rate). Also note that heart-beating capabilities are dictated by the client. A server is free to reject a client if its heart-beating capabilities are not up to its minimum requirements, but this is an implementation detail and is not dictated by the protocol.
@@ -165,9 +179,7 @@ Note that the value of zero indicates that the server will not be sending heart-
 
 \setminted{fontsize=\scriptsize,baselinestretch=1}
 
-Transactional events are a high-level abstraction that combine the first-class synchronous message-passing events of Concurrent ML (CML) with all-or-nothing transactions \cite{te:original}. Their inception draws
-inspiration from CML, Concurrent Haskell, and Software Transactional Memory (STM) Haskell. There currently 
-exist implementations as language extensions for both Haskell \cite{te:original} and ML \cite{te:ml}.
+Transactional events are a high-level concurrency abstraction that combine the first-class synchronous message-passing events of Concurrent ML (CML) with all-or-nothing transactions \cite{te:original}. Their inception draws inspiration from CML, Concurrent Haskell, and Software Transactional Memory (STM) Haskell. There currently exist implementations as language extensions for both Haskell \cite{te:original} and ML \cite{te:ml}.
 
 Transactional events are primarily motivated by the need for better abstractions in the development of 
 concurrent programs. The non-deterministic execution order of concurrent programs makes them inherently
@@ -232,10 +244,6 @@ One of the primary attributes of transactional events that makes them an attract
 The interface also provides a non-deterministic choice combinator in the form of \textit{chooseEvt}. This allows an event to synchronize on whichever of the two events it is able to synchronize on first, effectively aborting the computations performed in the event that is not chosen. Note that \textit{neverEvt} is the event that can never be synchronized upon. Hence, sequencing a \textit{neverEvt} using the monadic bind is an effective abort. Likewise the \textit{chooseEvt}, as it cannot choose an event that will not successfully complete, will never synchronize on the \textit{neverEvt}.
 
 Using this interface, one can easily compose sophisticated computational event structures that allow for inter-thread communication but guarantee that irrevocable side effects cannot take place during event synchronization (hence the "all-or-nothing" transactional claim). Indeed, transactional events are shown to be strictly more expressive than either STM Haskell and CML in \cite{te:original}. The authors provide encodings for both idioms using transactional events. The then demonstrate that one can express computations that are not possible in either, such as \textit{n}-way synchronization between threads.
-
-% \section{Project Goals}
-
-% The primary goal of this project was to implement a message broker, client software, and APIs for the STOMP protocol using Haskell with transactional events. [needs more, but what?]
 
 \section{Library Design \& Usage}
 
