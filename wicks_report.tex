@@ -629,7 +629,7 @@ The distributed model enabled by the STOMP broker is that of many clients acting
 
 We can imagine several possible approaches to this problem. We could choose a client at random, but we run the risk of that client being blocked on some other operation. We could implement a "round-robin" approach, where every client gets a turn, but we run into the same risk; the chosen client might be blocked. One could imagine that there exists a complicated suitability heuristic, but it is difficult to ascertain how that would read in code. It most certainly would not be straightforward, as it would necessitate logic for making an attempt, handling individual attempt failures, and canceling attempted sends that were in-progress. Additionally, we would somehow need to guarantee that we are able to cancel an in-progress send in a timely manner: we could very easily end up with a race condition in which two clients consume the message; such logic would need to be handled very carefully, and it is reasonably safe to assume that the resultant code would be difficult to reason about.
 
-Transactional events can be leveraged to make this choice straightforward to implement using the non-deterministic \textit{chooseEvt} combinator. Events can be constructed dynamically from a map containing client channels. When we synchronize on the event, the first client thread that is able to complete the transaction will do so, with all other events aborting without having sent the message to their respective clients thanks to the transactional guarantee provided by the semantics of transactional events.
+Transactional events can be leveraged to make this choice intuitive to implement using the non-deterministic \textit{chooseEvt} combinator. Events can be constructed dynamically from a map containing client channels. When we synchronize on the event, the first client thread that is able to complete the transaction will do so, with all other events aborting without having sent the message to their respective clients thanks to the transactional guarantee of transactional events.
 
 \begin{figure}[h]
 \begin{minted} {haskell}
@@ -658,12 +658,10 @@ partialClientChoiceEvt
   messageId 
   sentClients 
   sub@(ClientSub clientId _ _ frameHandler) = 
-    if clientId `elem` sentClients then 
-        (chooseEvt neverEvt) 
+    if clientId `elem` sentClients then (chooseEvt neverEvt) 
     else let frame' = transformFrame frame messageId sub in
-        chooseEvt $ 
-            (putEvt frame' frameHandler) 
-                `thenEvt` (\_ -> alwaysEvt $ Just sub)
+        chooseEvt $ (putEvt frame' frameHandler) 
+            `thenEvt` (\_ -> alwaysEvt $ Just sub)
 \end{minted}
 \caption{Nondeterministic Choice of Consumer}
 \label{nondtchoice}
@@ -735,24 +733,36 @@ The approach to the client design is ``event-driven". There are asynchronous loo
         \label{stompsend}
     \end{figure}
 
-\subsection{Client Commands}
+The core code for the message processing loop is given in Figure \ref{subhandling}. Note that the \textit{subChan} is used to receive updates with respect to new subscriptions. The \textit{subChoiceEvt} is a dynamically constructed selector that synchronizes on the first available subscription listener, or blocks if there are no new messages on any active subscription.
 
-A listing and description of client commands in this application is given as follows:
+\begin{figure}[h]
+\centering
+\begin{minted} {haskell}
+subscriptionLoop :: 
+  SChan SubscriptionUpdate -> 
+  Subscriptions -> 
+  TLog.Logger -> 
+  IO ()
+subscriptionLoop subChan subs = do
+    update <- sync $ (recvEvt subChan) 
+        `chooseEvt` (subChoiceEvt subs)
+    subs'  <- handleSubUpdate update subs
+    subscriptionLoop subChan subs'
 
-\begin{itemize}
-    \item \textbf{connect [hostname] [port]}: connect to a STOMP broker on the given hostname/port combination.
-    \item \textbf{disconnect}: disconnect from an active session
-    \item \textbf{send [destination] [message]}: Send a text frame containing the given message to the given destination.
-    \item \textbf{sendr [destination] [receipt-id] [message]}: Send a text frame containig the given message to the given destination. Request a receipt with the given receipt-id.
-    \item \textbf{loopsend [n] [destination] [message]}: Send a text frame containing the given message to the given destination n times in a row.
-    \item \textbf{subscribe [destination]}: Subscribe to the given destination.
-    \item \textbf{unsubscribe [subscription-id]}: Unsubscribe from the subscription with the given subscription id.
-    \item \textbf{begin [tx-id]}: Begin a named transaction with the tx-id as the transaction identifier. All send and sendr commands prior to either a commit or an abort will be send as part of this transaction.
-    \item \textbf{commit}: Commit the transaction in process, if such exists.
-    \item \textbf{abort}: Abort the transaction in process, if such exists.
-    \item \textbf{subs}: List details about all active subscriptions
-    \item \textbf{exit}: Close the active session (if any) and exit the application.
-\end{itemize}
+subChoiceEvt :: Subscriptions -> Evt SubscriptionUpdate
+subChoiceEvt subs = HM.foldr partialSubChoiceEvt neverEvt subs
+
+partialSubChoiceEvt :: 
+  Subscription -> 
+  Evt SubscriptionUpdate ->
+   Evt SubscriptionUpdate
+partialSubChoiceEvt (Subscription _ _ evtChan ackType) = 
+    chooseEvt $ (recvEvt evtChan) `thenEvt`
+        (\frameEvt -> alwaysEvt (Received frameEvt ackType))
+\end{minted}
+\caption{Handling Subscription Events in the Client}
+\label{subhandling}
+\end{figure}
 
 \section{Conclusion}
 
