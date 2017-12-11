@@ -53,7 +53,7 @@
 \begin{document}
 
 
-\title{Using Transactional Events in Haskell in the Impelementation of Message Broker Middleware}
+\title{Utilizing Transactional Events in Haskell in the Impelementation of Message Broker Middleware}
 
 \author{\IEEEauthorblockN{Christopher R. Wicks}
 \IEEEauthorblockA{Department of Computer Science\\Golisano College of Computing and Information Sciences\\
@@ -248,6 +248,8 @@ The interface also provides a non-deterministic choice combinator in the form of
 Using this interface, one can easily compose sophisticated computational event structures that allow for inter-thread communication but guarantee that irrevocable side effects cannot take place during event synchronization (hence the "all-or-nothing" transactional claim). Indeed, transactional events are shown to be strictly more expressive than either STM Haskell and CML in \cite{te:original}. The authors provide encodings for both idioms using transactional events. The then demonstrate that one can express computations that are not possible in either, such as \textit{n}-way synchronization between threads.
 
 \section{Library Design \& Usage}
+
+The \textit{tehstomp-lib} package that was developed as part of this project provides modules that export useful functions for developers that are working with STOMP-based applications in Haskell. Where appropriate (that is, where doing so does not expose unsafe operations) both \textit{IO}- and \textit{Evt}-based functions are exported for operations that involve side-effects. This provides the caller some flexibility in the design of their applications. If the caller does not wish to manage the details of transactional event synchronization, they can simply call the \textit{IO}-based functionality. If they wish to incorporate library events into an application that also utilizes transactional events, the \textit{Evt}-based functions are provided so that they may be composed as part of larger event synchronizations.
 
 \subsection{Stomp.Frames}
 
@@ -457,7 +459,7 @@ One can envision a client application in which multiple system components are in
     \label{framerouter}
 \end{figure}
 
-Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandler}, interested system components can use it to obtain dedicated event channels. The \textit{FrameRouter} maintains lists of those channels, and when a relevant \textit{FrameEvt} is received, it is broadcast to all registered listeners. Clients can register for frames that are sent to individual subscriptions (MESSAGE), frames that are sent as responses (CONNECTED, RECEIPT), or ERROR frames. They can also request to receive heart-beats. Per-frame processing for each registered channel is handled on a separate thread, so that no individu7al registered component is able to hold up processing for any of the other registered components.
+Once the \textit{RequestHandler} has been initialized with a \textit{FrameHandler}, interested system components can use it to obtain dedicated event channels. The \textit{FrameRouter} maintains lists of those channels, and when a relevant \textit{FrameEvt} is received, it is broadcast to all registered listeners. Clients can register for frames that are sent to individual subscriptions (MESSAGE), frames that are sent as responses (CONNECTED, RECEIPT), or ERROR frames. They can also request to receive heart-beats. Per-frame processing for each registered channel is handled on a separate thread, so that no individual registered component is able to hold up processing for any of the other registered components.
 
 \subsection{Additional Modules}
 There are a few additional modules exported by the library that do not have to do with STOMP directly, but are useful nonetheless and are mentioned here in brief. The \textit{Stomp.TLogger} module implements a transactional ``logger", similar but simpler in concept and design to that of the \textit{FrameHandler}. The \textit{Stomp.Increment} module implements a stateful incrementer that is used in generating unique message and subscription identifiers.
@@ -532,7 +534,7 @@ The server itself maintains a separate stateful loop in the \textit{Subscription
 
 \subsection{The Subscriptions Module}
 
-The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that client threads use to report updates to client subscriptions. Subscription handling is the most complex portion of the system. Initialization of the \textit{SubscriptionManager} involves forking off two separate stateful loops: one to maintain the state of active client subscriptions, and one to maintain the state of message acknowledgements.
+The \textit{Subscriptions} module exports a \textit{SubscriptionManager} that the threads that manage client connections use to report updates to client subscriptions. Subscription handling is the most complex portion of the system. Initialization of the \textit{SubscriptionManager} involves forking off two separate stateful loops: one to maintain the state of active client subscriptions, and one to maintain the state of message acknowledgements.
 
 \begin{figure}[h]
     \centering
@@ -751,6 +753,7 @@ A detailed account of a large-scale implementation utilizing the abstraction doe
 In addition to Haskell, the semantics outlined in Fluet and Donnelly's 2008 work have been implemented in ML \cite{te:ml}. 
 Kehrt, Effinger-Dean, Schmitz, and Grossman identify some basic problems that arise from some simple use cases for
 transactional events, and propose idiomatic approaches to these issues in their work ``Programming Idioms for Transactional Events" \cite{te:idioms}.  
+
 
 \bibliographystyle{IEEEtran}
 \bibliography{IEEEabrv,citations}
