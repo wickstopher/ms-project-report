@@ -420,8 +420,6 @@ Since the protocol dictates that the sender delivers either a frame or a heartbe
 
 \subsection{Stomp.Frames.IO.Router}
 
-\textit{[Note to the early reader of this report: there are aspects of this system that are still not quite complete, but will be for the final project]}
-
 One can envision a client application in which multiple system components are interested in the different types of frames that are received from the server. As part of the \textit{tehstomp-lib} library, we provide a client-centric (in that it would be not suitable for use in a server implementation) event management system, wrapping a \textit{FrameHandler}, that routes frames to registered listeners. The exported API is given in Figure \ref{framerouter}.
 
 \begin{figure}[h]
@@ -450,7 +448,9 @@ One can envision a client application in which multiple system components are in
     requestHeartbeatEvents :: 
       RequestHandler -> 
       IO (SChan FrameEvt)
-
+      
+    -- |Request a dedicated channel on which to receive
+    -- ERROR frames
     requestErrorEvents :: 
       RequestHandler -> 
       IO (SChan FrameEvt)
