@@ -448,7 +448,7 @@ One can envision a client application in which multiple system components are in
     requestHeartbeatEvents :: 
       RequestHandler -> 
       IO (SChan FrameEvt)
-      
+
     -- |Request a dedicated channel on which to receive
     -- ERROR frames
     requestErrorEvents :: 
@@ -723,7 +723,19 @@ Instead of synchronizing on a single update and then using that to update the st
 
 The STOMP client implemented for this project is a basic command-line client. It is not particularly representative of ``real-world" usage of a STOMP client, but is rather intended for interactive demonstration of the capbabilities of the message broker.
 
-The approach to the client design is ``event-driven". There are multiple asynchronous state loops that send events to the main session loop, which handles them synchronously.
+The approach to the client design is ``event-driven". There are asynchronous loops handling input from the keyboard and input from various listeners on the \textit{FrameRouter}. As events are received on these loops, they in turn send events to the main session loop, which synchronously handles displaying the event on the terminal for the user.
+
+\begin{figure}[h]
+        \centering
+        \ifCLASSINFOpdf
+             \includegraphics[scale=.65]{client_event.pdf}
+         \else
+        \fi
+        \caption{Client Event Handling}
+        \label{stompsend}
+    \end{figure}
+
+\subsection{Client Commands}
 
 A listing and description of client commands in this application is given as follows:
 
