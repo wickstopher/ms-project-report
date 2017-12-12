@@ -253,7 +253,7 @@ The \textit{tehstomp-lib} package that was developed as part of this project pro
 
 \subsection{Stomp.Frames}
 
-The initial challenge in implementing the shared libraries was in determining exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The Frame data type was designed as shown in Figure \ref{frame}, and was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle.
+The initial challenge in implementing the shared libraries was in determining exactly how STOMP frames should be represented, and how they would be passed back-and-forth over a TCP connection. The \textit{Frame} data type was designed such that it can be easily parsed and constructed piecemeal while reading bytes from a socket handle (see Figure \ref{frame}).
 
 \begin{figure}[h]
     \centering
@@ -304,11 +304,11 @@ The initial challenge in implementing the shared libraries was in determining ex
     \label{frame}
 \end{figure}
 
-The definition for the Frame datatype is contained within the \textit{Stomp.Frames} module of the \textit{tehstomp-lib} library package (see \textit{Appendix A}). Additionally, that module exports a plethora of utility functions for constructing, manipulating, and extracting information from Frames, including straightforward constructions for all of the commands with their required headers. Utilizing this interface it is simple for clients of the library to construct any possible STOMP frame.
+The definition for the \textit{Frame} datatype is contained within the \textit{Stomp.Frames} module of the \textit{tehstomp-lib} library package (see \textit{Appendix A}). Additionally, that module exports a plethora of utility functions for constructing, manipulating, and extracting information from \textit{Frames}, including straightforward constructions for all of the commands with their required headers. Utilizing this interface it is simple for clients of the library to construct any possible STOMP frame.
 
 \subsection{Stomp.Frames.IO}
 
-Another module provided by the \textit{tehstomp-lib} package is called \textit{Stomp.Frames.IO}. This module encapsulates error-handling IO operations on Handles that are expected to be receiving STOMP frames. In most cases, this will be a Handle to a TCP socket connection in a STOMP client or broker, although any producer or consumer of STOMP frames could be handled using the library. The FrameHandler datatype utilizes transactional events to provide multiple asynchronous readers and writers with synchronous access to the underlying Handle as Frames are read and written. To achieve this, the datatype houses two synchronous channels (SChans). Clients obtain a FrameHandler by using the \textit{initFrameHandler} function. We obtain two synchronous channels, and then fork off looping threads that handle their processing (see Figure \ref{framehandler}).
+Another module provided by the \textit{tehstomp-lib} package is called \textit{Stomp.Frames.IO}. This module encapsulates error-handling IO operations on Handles that are expected to be receiving STOMP frames. In most cases, this will be a \textit{Handle} to a TCP socket connection in a STOMP client or broker, although any producer or consumer of STOMP frames could be handled using the library. The \textit{FrameHandler} datatype utilizes transactional events to provide multiple asynchronous readers and writers with synchronous access to the underlying \textit{Handle} as frames are read and written. To achieve this, the datatype houses two synchronous channels (\textit{SChans}). Clients obtain a \textit{FrameHandler} by using the \textit{initFrameHandler} function. We obtain two synchronous channels, and then fork off looping threads that handle their processing (see Figure \ref{framehandler}).
 
 \begin{figure}[h]
     \centering
@@ -351,9 +351,9 @@ Another module provided by the \textit{tehstomp-lib} package is called \textit{S
     \label{framehandler}
 \end{figure}
 
-The \textit{frameReaderLoop} function shown above loops waiting for input on a handle (the \textit{parseFrame} function), and then attempts to synchronize on its \textit{SChan}. When a client synchronizes on the \textit{getEvt} function, the synchronization occurs, the FrameEvt is returned in an IO context, and the next frame is parsed. The API takes a two-tiered approach. The bare Evt functions are exposed, along with functions that abstract the event synchronization away from the client (an analogous \textit{get} function is provided as well). This offers some flexibility in the construction of applications using these events.
+The \textit{frameReaderLoop} function shown above loops waiting for input on a handle (the \textit{parseFrame} function), and then attempts to synchronize on its \textit{SChan}. When a client synchronizes on the \textit{getEvt} function, the synchronization occurs, the \textit{FrameEvt} is returned in an \textit{IO} context, and the next frame is parsed. The API takes a two-tiered approach. The bare \textit{Evt} functions are exposed, along with functions that abstract the event synchronization away from the client (an analogous \textit{get} function is provided as well). This offers some flexibility in the construction of applications using these events.
 
-For readers that are expecting heart-beats, we offer an additional function that times out if no data is received on the Handle, shown in figure \ref{recv-heartbeat}.
+For readers that are expecting heart-beats, we offer an additional function that times out if no data is received on the \textit{Handle}, shown in figure \ref{recv-heartbeat}.
 
 \begin{figure}[h]
     \begin{minted} {haskell}
@@ -372,7 +372,7 @@ For readers that are expecting heart-beats, we offer an additional function that
 
 The \textit{timeOutEvt} is part of the extended \textit{TxEvents} library \cite{te:original}. It is an event that becomes available for synchronization after a given number of microseconds has transpired. In this particular case, the \textit{timeOutEvt} is sequenced with an \textit{alwaysEvt} that will always return \textit{TimedOut}; note that the \textit{timeOutEvt} simply returns the unit value, and this particular function needs to return a \textit{TimeOutEvt}. This necessitates the usage of the \textit{thenEvt} sequencing combinator as shown above. Without the availability of this combinator, returning default values or specifying alternative control flows for timeouts in event processing would require much more complex logic. As it is, we can specify the ``next step" to take after a timeout simply and logically. When a client synchronizes on the \textit{getEvtWithTimeOut} event, if we have to wait longer than the given time allotment to receive an event on the read channel, the second choice is taken, and \textit{TimedOut} is returned to the client.
 
-The \textit{FrameHandler} abstraction also provides functionality for \textit{automatically} generating heartbeats if so needed (see Figure \ref{send-heartbeat}). This allows the client of this library, be it a client or a server application, to simply ``set and forget" once initial negotiations have transpired.
+The \textit{FrameHandler} abstraction also provides functionality for \textit{automatically} generating heart-beats if so needed (see Figure \ref{send-heartbeat}). This allows the client of this library, be it a client or a server application, to simply ``set and forget" once initial negotiations have transpired.
 
 \begin{figure}[h]
     \begin{minted} {haskell}
@@ -416,7 +416,7 @@ The \textit{FrameHandler} abstraction also provides functionality for \textit{au
     \label{send-heartbeat}
 \end{figure}
 
-Since the protocol dictates that the sender delivers either a frame or a heartbeat at least once per interval, and whether or not a sender is going to send a frame at some point during that interval is non-deterministic, we construct the event using the \textit{chooseEvt} combinator. This event will either send a frame if one is provided within the interval, or send a heartbeat after said interval has transpired without receiving any frames to transmit. We also provide a means for updating the heartbeat after the loop has been initiated. The reasoning for this is that it is likely that a client or server will want to use the FrameHandler in setting up heart-beating and protocol negotiations, so it will need to be initialized prior to the final frequency determination. This allows for those initial negotiations to take place and the heart-beating mechanism to be kicked off after the fact if necessary.
+Since the protocol dictates that the sender delivers either a frame or a heartbeat at least once per interval, and whether or not a sender is going to send a frame at some point during that interval is non-deterministic, we construct the event using the \textit{chooseEvt} combinator. This event will either send a frame if one is provided within the interval, or send a heartbeat after said interval has transpired without receiving any frames to transmit. We also provide a means for updating the heartbeat after the loop has been initiated. The reasoning for this is that it is likely that a client or server will want to use the \textit{FrameHandler} in setting up heart-beating and protocol negotiations, so it will need to be initialized prior to the final frequency determination. This allows for those initial negotiations to take place and the heart-beating mechanism to be kicked off after the fact if necessary.
 
 \subsection{Stomp.Frames.IO.Router}
 
